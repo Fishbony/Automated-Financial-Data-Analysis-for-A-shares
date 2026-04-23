@@ -1,3 +1,56 @@
+"""
+Step 6/8 — 利润表标准化重构
+============================
+将同花顺原始利润表 CSV 清洗、排序，并按投行建模口径重新分类，
+输出标准化长表、宽表、估值输入底稿及映射追溯体系。
+
+标准科目结构
+------------
+Operating
+  Revenue / COGS / Taxes & Surcharges / Selling Expense /
+  Admin Expense / R&D Expense / Financial Expense /
+  Asset & Credit Impairment / Other Operating Gains /
+  Operating Profit
+
+Below Operating
+  Non-operating Income / Non-operating Expense /
+  Profit Before Tax / Income Tax / Net Profit
+
+Equity Attribution
+  Parent Net Profit / Minority Interest Profit / Adjusted Net Profit
+
+Comprehensive Income
+  Parent OCI / Parent Comprehensive Income
+
+Per Share
+  Basic EPS / Diluted EPS
+
+估值输入指标（Valuation Input Sheet）
+--------------------------------------
+- Gross Profit、Core Opex、Financial Expense、Impairment
+- Operating Profit、EBIT、EBITDA Proxy、Profit Before Tax、Parent Net Profit
+- Gross Margin、Operating Margin、Parent Net Margin、Effective Tax Rate
+
+输入
+----
+- results/csv/pl.csv    同花顺原始利润表
+
+输出（results/PL_rebuilt_output/）
+------------------------------------
+- 1_preprocess_pl.csv        去重、排序后的预处理表
+- 2_standardized_pl.csv      标准化长表
+- 3_mapping_detail.csv       原始科目 → 标准科目映射
+- 4_analysis_bridge.csv      各标准科目的组成项拆解
+- 5_valuation_ready_pl.xlsx  可直接用于估值的 Excel 底稿
+- PL重构说明.md              本次重构的完整说明文档
+
+运行方式
+--------
+    python rebuild_income_statement.py
+    # 或通过主管道：
+    python run_pipeline.py
+"""
+
 import os
 from typing import Dict, List, Tuple
 

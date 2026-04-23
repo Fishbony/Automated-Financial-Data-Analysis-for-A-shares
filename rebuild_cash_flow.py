@@ -1,3 +1,67 @@
+"""
+Step 7/8 — 现金流量表标准化重构
+================================
+将同花顺原始现金流量表 CSV 清洗、排序，并按投行建模口径重新分类，
+同时对关键勾稽项目进行六项一致性校验。
+
+标准科目结构
+------------
+Operating CF
+  Inflows:  Cash From Customers / Tax Refunds / Other Operating Cash In
+  Outflows: Cash Paid to Suppliers / Cash Paid to Employees / Taxes Paid
+  Net:      Operating Cash Flow
+
+Investing CF
+  Inflows:  Investment Recovery / Investment Income / Asset Disposal /
+            Other Investing Cash In
+  Outflows: Capex / Investment Cash Out
+  Net:      Investing Cash Flow
+
+Financing CF
+  Inflows:  Equity Financing / Debt Financing / Other Financing Cash In
+  Outflows: Debt Repayment / Dividend & Interest / Other Financing Cash Out
+  Net:      Financing Cash Flow
+
+Cash Reconciliation
+  FX Impact / Net Change in Cash / Beginning Cash / Ending Cash
+
+Indirect CFO Bridge（间接法附注）
+  Depreciation / Amortization / Working Capital changes 等
+
+六项一致性校验
+--------------
+1. 经营现金流：流入小计 - 流出小计 = 净额
+2. 投资现金流：流入小计 - 流出小计 = 净额
+3. 筹资现金流：流入小计 - 流出小计 = 净额
+4. 现金净增加额：CFO + CFI + CFF + FX = 净增加额
+5. 期末现金：期初 + 净增加额 = 期末
+6. 间接法验证：直接法 CFO ≈ 间接法 CFO
+
+估值输入指标（Valuation Input Sheet）
+--------------------------------------
+- Operating CF / Capex / Free Cash Flow Proxy / CFI / CFF
+- Cash Conversion（CFO/净利润）/ Debt Service Cover / Cash Reinvestment Ratio
+
+输入
+----
+- results/csv/cf.csv    同花顺原始现金流量表
+
+输出（results/CF_rebuilt_output/）
+------------------------------------
+- 1_preprocess_cf.csv        去重、排序后的预处理表
+- 2_standardized_cf.csv      标准化长表
+- 3_mapping_detail.csv       原始科目 → 标准科目映射
+- 4_analysis_bridge.csv      各标准科目的组成项拆解
+- 5_valuation_ready_cf.xlsx  可直接用于估值的 Excel 底稿
+- CF重构说明.md              本次重构的完整说明文档
+
+运行方式
+--------
+    python rebuild_cash_flow.py
+    # 或通过主管道：
+    python run_pipeline.py
+"""
+
 import os
 from typing import Dict, List, Tuple
 

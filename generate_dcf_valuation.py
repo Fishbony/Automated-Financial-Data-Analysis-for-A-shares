@@ -1,3 +1,46 @@
+"""
+Step 8/8 — DCF 估值模型生成
+============================
+读取三表标准化输出和公司基础信息，自动计算历史财务驱动因子，
+生成包含多个联动 Sheet 的 Excel DCF 估值工作簿。
+
+工作簿结构（共 10 个 Sheet）
+------------------------------
+Summary          — 估值总览：DCF vs 相对估值、加权目标价、上行/下行空间
+Historical       — 历史财务整理（Revenue、EBIT、CapEx、CFO 等）
+Assumptions      — 可编辑假设区（WACC、永续增长率、5年逐年收入增速等）
+Forecast         — 5 年经营预测与 FCFF 计算（公式联动 Assumptions）
+DCF              — DCF 估值主表（EV → 股东权益价值 → 每股内在价值）
+Sensitivity      — WACC / 永续增长率 敏感性矩阵（含条件格式）
+Comparable       — 相对估值（PE / PB / EV/EBIT / EV/EBITDA）
+Investment_Thesis — 投资评级与核心观点（自动联动估值结果）
+Charts           — Revenue / EBIT / FCFF 趋势图 + 目标价区间图
+Raw_Data         — 模型关键原始口径备查
+
+自动计算的驱动因子
+------------------
+- 收入增速 Seed：基于最近 3 年 CAGR，夹在 [3%, 20%]
+- EBIT Margin / Tax Rate / D&A% / CapEx% / NWC%：3 年均值，夹在合理区间
+- 5 年预测增速：从 Seed 开始逐年平缓下台阶
+
+输入
+----
+- results/BS_rebuilt_output/2_standardized_bs.csv
+- results/PL_rebuilt_output/2_standardized_pl.csv
+- results/CF_rebuilt_output/2_standardized_cf.csv
+- rawdata/Info.csv     （需含：总股本、当前股价、公司简称）
+
+输出
+----
+- results/valuation_output/DCF_valuation_model.xlsx
+
+运行方式
+--------
+    python generate_dcf_valuation.py
+    # 或通过主管道：
+    python run_pipeline.py
+"""
+
 import math
 import os
 from datetime import date

@@ -1,3 +1,32 @@
+"""
+pipeline_utils — 管道公共工具函数
+==================================
+提供目录管理、股票代码识别、原始数据文件校验等全局共用工具，
+被管道中的各步骤脚本导入使用。
+
+主要功能
+--------
+ensure_output_dirs()
+    创建 results/ 和 results/csv/ 目录（幂等）
+
+detect_ticker(raw_dir)
+    从 rawdata/ 中的文件名推断股票代码
+    例：600406_debt_year.xls → "600406"
+
+validate_rawdata(raw_dir)
+    校验 rawdata/ 下的四个必需文件是否均存在：
+    - {ticker}_debt_year.xls    资产负债表
+    - {ticker}_benefit_year.xls 利润表
+    - {ticker}_cash_year.xls    现金流量表
+    - {ticker}_price.xls        价格数据
+
+导出常量
+--------
+RAW_DIR     rawdata/ 目录 Path 对象
+RESULTS_DIR results/ 目录 Path 对象
+CSV_DIR     results/csv/ 目录 Path 对象
+"""
+
 from __future__ import annotations
 
 from pathlib import Path

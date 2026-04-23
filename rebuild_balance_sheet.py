@@ -1,3 +1,57 @@
+"""
+Step 5/8 — 资产负债表标准化重构
+================================
+将同花顺原始资产负债表 CSV 清洗、去重，并按投行建模口径重新分类，
+输出标准化长表、宽表、估值输入底稿及完整的映射追溯体系。
+
+分类体系（投行口径）
+--------------------
+Assets
+  Current Assets
+    - Cash & Short-term Financial Assets
+    - Core Operating Current Assets
+    - Non-operating Misc. Current Assets
+  Non-current Assets
+    - Long-term Core Operating Assets
+    - Long-term Financial & Equity Investments
+    - Risk & Amortizing Assets
+    - Tax & Other Long-term Assets
+
+Liabilities
+  Current Liabilities
+    - Interest-bearing Short-term Debt
+    - Operating Non-interest-bearing Current Liabilities
+    - Non-operating Misc. Current Liabilities
+  Non-current Liabilities
+    - Long-term Interest-bearing Debt
+    - Long-term Operating Non-interest-bearing Liabilities
+    - Tax & Subsidy-related Non-cash Liabilities
+
+Equity
+  - Parent Contributed Capital
+  - Parent Retained Earnings
+  - Other Comprehensive Income (OCI)
+  - Minority Interest
+
+输入
+----
+- results/csv/bs.csv    同花顺原始资产负债表
+
+输出（results/BS_rebuilt_output/）
+-----------------------------------
+- 1_preprocess_bs.csv        去重、排序后的预处理表
+- 2_standardized_bs.csv      标准化长表（含小计和合计行）
+- 3_mapping_detail.csv       原始科目 → 标准科目映射明细
+- 4_analysis_bridge.csv      各标准科目的组成项拆解
+- 5_valuation_ready_bs.xlsx  可直接用于估值的 Excel 底稿
+- BS重构过程说明.md           本次重构的完整说明文档
+
+运行方式
+--------
+    python rebuild_balance_sheet.py
+    # 或通过主管道：
+    python run_pipeline.py
+"""
 
 import os
 import re

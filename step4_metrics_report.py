@@ -1,3 +1,46 @@
+"""
+Step 4/8 — 完整财务指标报告（增强版）
+======================================
+在 step3_extract_metrics.py 的基础上，新增 YoY 增速、CAGR、
+ROE、资产负债率、CFO 质量等指标，并输出完整的 Markdown 分析报告。
+
+相比 step3，本脚本新增
+-----------------------
+- YoY 增速：Revenue / Net Profit / CFO / FCF
+- CAGR（全历史期间）
+- ROE（归母净利润 / 平均归母权益）
+- 资产负债率 / 权益比率
+- CFO/Net profit（经营现金含金量）
+- CapEX/Revenue（资本开支强度）
+- 一致性校验（资产负债表恒等式）
+- Summary Analysis 摘要表
+- Model Ready 宽表（可直接粘贴进财务模型）
+- 缺失科目日志（Missing Log）
+
+输入
+----
+- results/csv/pl.csv    利润表
+- results/csv/bs.csv    资产负债表
+- results/csv/cf.csv    现金流量表
+
+输出
+----
+- results/financial_core_metrics_plus.xlsx
+    * ExtractData         原始科目提取值
+    * Processed Metrics   全量建模指标
+    * Consistency Checks  资产负债表恒等式校验
+    * Summary Analysis    CAGR 与最新年度关键指标
+    * Model Ready         可直接用于建模的宽表
+    * Missing Log         未匹配到的科目日志
+- results/financial_core_metrics_report.md
+- results/missing_items_log.csv
+
+运行方式
+--------
+    python step4_metrics_report.py
+    # 或通过主管道：
+    python run_pipeline.py
+"""
 
 import pandas as pd
 import numpy as np

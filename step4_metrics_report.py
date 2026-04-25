@@ -45,6 +45,12 @@ ROE、资产负债率、CFO 质量等指标，并输出完整的 Markdown 分析
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from openpyxl import load_workbook
+from openpyxl.chart import BarChart, LineChart, Reference
+from openpyxl.chart.series import SeriesLabel
+from openpyxl.styles import Font as XLFont, PatternFill, Alignment
+from openpyxl.utils import get_column_letter
+from excel_utils import apply_bilingual_fonts
 
 PL_FILE = "./results/csv/pl.csv"
 BS_FILE = "./results/csv/bs.csv"
@@ -120,6 +126,156 @@ def fmt_pct(x):
     if pd.isna(x):
         return "NaN"
     return f"{x:.2%}"
+
+def _add_charts_sheet(output_path: str, metrics: pd.DataFrame, years: list) -> None:
+    """
+    在已保存的 Excel 文件中追加 "Charts" 工作表，包含 4 张图表：
+    1. Revenue & Net profit — 柱状图（金额绝对值）
+    2. Margin trends — 折线图（毛利率、净利率、EBITDA Margin）
+    3. CFO & FCF — 柱状图（现金流绝对值）
+    4. ROE & 资产负债率 — 折线图（资本结构与回报率）
+
+    Parameters
+    ----------
+    output_path : str
+        已生成的 Excel 文件路径，图表页将追加至该文件。
+    metrics : pd.DataFrame
+        Processed Metrics 数据框（行为指标名，列为年份）。
+    years : list
+        覆盖年份列表（字符串格式，与 metrics.columns 一致）。
+    """
+    wb = load_workbook(output_path)
+
+    # ── 构建图表数据辅助页（隐藏）────────────────────────────────────────
+    DATA_SHEET = "_ChartData"
+    if DATA_SHEET in wb.sheetnames:
+        del wb[DATA_SHEET]
+    dws = wb.create_sheet(DATA_SHEET)
+    dws.sheet_state = "hidden"
+
+    # 列布局：A=Year, B=Revenue, C=Net profit, D=Gross Margin,
+    #         E=Net Margin, F=EBITDA Margin, G=CFO, H=FCF,
+    #         I=ROE, J=资产负债率
+    headers = ["Year", "Revenue", "Net profit", "Gross Margin",
+               "Net Margin", "EBITDA Margin", "CFO", "FCF",
+               "ROE", "资产负债率"]
+    metric_keys = ["Revenue", "Net profit", "Gross Margin",
+                   "Net Margin", "EBITDA Margin", "CFO", "FCF",
+                   "ROE", "资产负债率"]
+
+    for col_idx, h in enumerate(headers, start=1):
+        dws.cell(row=1, column=col_idx, value=h)
+
+    n_years = len(years)
+    for r, yr in enumerate(years, start=2):
+        dws.cell(row=r, column=1, value=yr)
+        for c_offset, key in enumerate(metric_keys, start=2):
+            val = metrics.loc[key, yr] if key in metrics.index else None
+            dws.cell(row=r, column=c_offset, value=val if pd.notna(val) else None)
+
+    data_rows = n_years + 1  # including header row
+
+    # ── Charts 展示页 ────────────────────────────────────────────────────
+    CHARTS_SHEET = "Charts"
+    if CHARTS_SHEET in wb.sheetnames:
+        del wb[CHARTS_SHEET]
+    cws = wb.create_sheet(CHARTS_SHEET)
+
+    # 标题行
+    title_cell = cws["A1"]
+    title_cell.value = "核心财务指标图表"
+    title_cell.font = XLFont(name="SimHei", bold=True, size=14)
+    title_cell.fill = PatternFill("solid", fgColor="1F4E79")
+    title_cell.font = XLFont(name="SimHei", bold=True, size=14, color="FFFFFF")
+
+    def _year_ref():
+        """返回年份列（A列）的 Reference，用于各图表的 x 轴标签。"""
+        return Reference(dws, min_col=1, min_row=2, max_row=data_rows)
+
+    # ── 图表 1：Revenue & Net profit 柱状图 ─────────────────────────────
+    bar1 = BarChart()
+    bar1.type = "col"
+    bar1.grouping = "clustered"
+    bar1.title = "Revenue & Net Profit（元）"
+    bar1.y_axis.title = "金额（元）"
+    bar1.x_axis.title = "年份"
+    bar1.style = 10
+    bar1.width = 18
+    bar1.height = 12
+
+    rev_data = Reference(dws, min_col=2, min_row=1, max_row=data_rows)
+    np_data  = Reference(dws, min_col=3, min_row=1, max_row=data_rows)
+    bar1.add_data(rev_data, titles_from_data=True)
+    bar1.add_data(np_data, titles_from_data=True)
+    bar1.set_categories(_year_ref())
+    cws.add_chart(bar1, "A3")
+
+    # ── 图表 2：Margin trends 折线图 ─────────────────────────────────────
+    line1 = LineChart()
+    line1.title = "利润率趋势（Margin）"
+    line1.y_axis.title = "比率"
+    line1.x_axis.title = "年份"
+    line1.y_axis.numFmt = "0%"
+    line1.style = 10
+    line1.width = 18
+    line1.height = 12
+
+    gm_data   = Reference(dws, min_col=4, min_row=1, max_row=data_rows)
+    nm_data   = Reference(dws, min_col=5, min_row=1, max_row=data_rows)
+    ebit_data = Reference(dws, min_col=6, min_row=1, max_row=data_rows)
+    line1.add_data(gm_data,   titles_from_data=True)
+    line1.add_data(nm_data,   titles_from_data=True)
+    line1.add_data(ebit_data, titles_from_data=True)
+    line1.set_categories(_year_ref())
+    cws.add_chart(line1, "J3")
+
+    # ── 图表 3：CFO & FCF 柱状图 ─────────────────────────────────────────
+    bar2 = BarChart()
+    bar2.type = "col"
+    bar2.grouping = "clustered"
+    bar2.title = "CFO & FCF（元）"
+    bar2.y_axis.title = "金额（元）"
+    bar2.x_axis.title = "年份"
+    bar2.style = 10
+    bar2.width = 18
+    bar2.height = 12
+
+    cfo_data = Reference(dws, min_col=7, min_row=1, max_row=data_rows)
+    fcf_data = Reference(dws, min_col=8, min_row=1, max_row=data_rows)
+    bar2.add_data(cfo_data, titles_from_data=True)
+    bar2.add_data(fcf_data, titles_from_data=True)
+    bar2.set_categories(_year_ref())
+    cws.add_chart(bar2, "A23")
+
+    # ── 图表 4：ROE & 资产负债率 折线图 ─────────────────────────────────
+    line2 = LineChart()
+    line2.title = "ROE & 资产负债率"
+    line2.y_axis.title = "比率"
+    line2.x_axis.title = "年份"
+    line2.y_axis.numFmt = "0%"
+    line2.style = 10
+    line2.width = 18
+    line2.height = 12
+
+    roe_data  = Reference(dws, min_col=9,  min_row=1, max_row=data_rows)
+    lev_data  = Reference(dws, min_col=10, min_row=1, max_row=data_rows)
+    line2.add_data(roe_data,  titles_from_data=True)
+    line2.add_data(lev_data,  titles_from_data=True)
+    line2.set_categories(_year_ref())
+    cws.add_chart(line2, "J23")
+
+    # 把 Charts 移到所有 Sheet 最前面（紧接在 Missing Log 后）
+    wb.move_sheet(CHARTS_SHEET, offset=-(len(wb.sheetnames) - 1))
+
+    wb.save(output_path)
+
+
+def _apply_fonts_to_file(output_path: str) -> None:
+    """重新打开文件，应用双语字体后保存。"""
+    wb = load_workbook(output_path)
+    apply_bilingual_fonts(wb)
+    wb.save(output_path)
+
 
 def main():
     pl = load_statement(PL_FILE)
@@ -277,6 +433,10 @@ def main():
         pd.DataFrame(missing_log).to_excel(writer, sheet_name="Missing Log", index=False)
 
     pd.DataFrame(missing_log).to_csv(OUTPUT_MISSING, index=False, encoding="utf-8-sig")
+
+    # ── 后处理：添加 Charts 图表页 + 双语字体 ────────────────────────────
+    _add_charts_sheet(OUTPUT_XLSX, metrics, years)
+    _apply_fonts_to_file(OUTPUT_XLSX)
 
     found_count = sum(1 for x in missing_log if x["status"] == "found")
     missing_items = [x["label"] for x in missing_log if x["status"] == "missing"]

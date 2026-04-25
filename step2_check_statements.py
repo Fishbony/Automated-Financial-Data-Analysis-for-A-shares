@@ -33,6 +33,8 @@ Step 2/8 — 三表一致性检验
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from openpyxl import load_workbook
+from excel_utils import apply_bilingual_fonts
 
 # ── 文件路径配置 ────────────────────────────────────────────────────────────
 BS_FILE = "./results/csv/bs.csv"
@@ -254,6 +256,10 @@ with pd.ExcelWriter(OUTPUT_XLSX, engine="openpyxl") as writer:
     if equity_link_check is not None:
         equity_link_check.to_excel(writer, sheet_name="5_净利润与权益变动")
 
+# 应用双语字体（Calibri / 黑体）
+_wb = load_workbook(OUTPUT_XLSX)
+apply_bilingual_fonts(_wb)
+_wb.save(OUTPUT_XLSX)
 
 # ── 输出 Markdown 报告 ────────────────────────────────────────────────────────
 lines = []

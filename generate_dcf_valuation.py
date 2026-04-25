@@ -55,6 +55,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from pipeline_utils import detect_ticker
+from excel_utils import apply_bilingual_fonts
 
 
 BASE_DIR = Path(".")
@@ -353,14 +354,15 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["D16"] = "建议优先调整：收入增速、EBIT率、WACC、永续增长率、可比倍数"
     ws.freeze_panes = "A3"
     set_col_widths(ws, {"A": 20, "B": 16, "D": 20, "E": 12, "F": 12, "G": 12, "H": 10, "I": 14})
-    ws["B4"].number_format = "0.00"
-    ws["B5"].number_format = "#,##0"
-    ws["B6"].number_format = "0.0%"
-    ws["B7"].number_format = "0.0%"
-    ws["B8"].number_format = '#,##0.00'
-    ws["B9"].number_format = '#,##0.00'
-    ws["B10"].number_format = "0.00"
-    ws["B11"].number_format = "0.0%"
+    ws["B4"].number_format = "0.00"       # 基准年度（文本，格式不影响显示）
+    ws["B5"].number_format = "0.00"       # 当前股价（元/股，保留两位小数）
+    ws["B6"].number_format = "#,##0"      # 总股本（股数，整数带千分位）
+    ws["B7"].number_format = "0.0%"       # WACC（百分比）
+    ws["B8"].number_format = "0.0%"       # 永续增长率（百分比）
+    ws["B9"].number_format = "#,##0"      # 企业价值 EV（元，整数带千分位）
+    ws["B10"].number_format = "#,##0"     # 股东权益价值（元，整数带千分位）
+    ws["B11"].number_format = "0.00"      # 每股内在价值（元/股，两位小数）
+    ws["B12"].number_format = "0.0%"      # 相对当前股价空间（百分比）
     for ref in ["E4", "F4", "G4", "I4", "E5", "F5", "G5", "I5", "E7", "F7", "G7", "I7"]:
         ws[ref].number_format = "0.00"
     for ref in ["H4", "H5", "H7", "E9", "F9", "G9"]:
@@ -1068,6 +1070,7 @@ def main() -> None:
     ensure_output_dir()
     data = build_historical_dataset()
     wb = build_workbook(data)
+    apply_bilingual_fonts(wb)
     wb.save(OUTPUT_PATH)
     print(f"DCF估值模型已生成：{OUTPUT_PATH}")
 

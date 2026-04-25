@@ -38,6 +38,8 @@ Step 3/8 — 核心财务指标提取与计算（基础版）
 
 import pandas as pd
 import numpy as np
+from openpyxl import load_workbook
+from excel_utils import apply_bilingual_fonts
 
 # ── 文件路径配置 ─────────────────────────────────────────────────────────────
 PL_FILE = "./results/csv/pl.csv"
@@ -330,6 +332,11 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
     extract_df.to_excel(writer, sheet_name="ExtractData")
     metrics.to_excel(writer, sheet_name="Processed Metrics")
     notes.to_excel(writer, sheet_name="Metric Notes", index=False)
+
+# 应用双语字体（Calibri / 黑体）
+_wb = load_workbook(OUTPUT_FILE)
+apply_bilingual_fonts(_wb)
+_wb.save(OUTPUT_FILE)
 
 print(f"Step 3 完成！已输出：{OUTPUT_FILE}")
 print("提取数据预览：")

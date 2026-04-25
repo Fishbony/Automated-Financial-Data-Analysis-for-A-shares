@@ -59,6 +59,8 @@ import json
 from typing import Dict, List, Tuple
 
 import pandas as pd
+from openpyxl import load_workbook
+from excel_utils import apply_bilingual_fonts
 
 
 OUTPUT_DIR = "./results/BS_rebuilt_output"
@@ -811,6 +813,13 @@ def export_excel_package(
     return
 
 
+def _apply_bilingual_fonts_to_file(path: str) -> None:
+    """重新打开 xlsx 文件，应用双语字体（Calibri / 黑体）后保存。"""
+    wb = load_workbook(path)
+    apply_bilingual_fonts(wb)
+    wb.save(path)
+
+
 def save_outputs(
     output_dir: str,
     preprocess_df: pd.DataFrame,
@@ -837,6 +846,7 @@ def save_outputs(
         bridge_df=bridge_df,
         valuation_df=valuation_df,
     )
+    _apply_bilingual_fonts_to_file(excel_path)
     with open(os.path.join(output_dir, "BS重构过程说明.md"), "w", encoding="utf-8") as f:
         f.write(md_text)
 

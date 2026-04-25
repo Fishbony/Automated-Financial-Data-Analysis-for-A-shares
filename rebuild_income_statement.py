@@ -55,6 +55,8 @@ import os
 from typing import Dict, List, Tuple
 
 import pandas as pd
+from openpyxl import load_workbook
+from excel_utils import apply_bilingual_fonts
 
 
 OUTPUT_DIR = "./results/PL_rebuilt_output"
@@ -581,6 +583,13 @@ def export_excel_package(
                             ws.write_number(row_idx, col_idx, float(val), fmt)
 
 
+def _apply_bilingual_fonts_to_file(path: str) -> None:
+    """重新打开 xlsx 文件，应用双语字体（Calibri / 黑体）后保存。"""
+    wb = load_workbook(path)
+    apply_bilingual_fonts(wb)
+    wb.save(path)
+
+
 def save_outputs(
     output_dir: str,
     preprocess_df: pd.DataFrame,
@@ -597,8 +606,9 @@ def save_outputs(
     standardized_df.to_csv(os.path.join(output_dir, "2_standardized_pl.csv"), index=False, encoding="utf-8-sig")
     mapping_detail_df.to_csv(os.path.join(output_dir, "3_mapping_detail.csv"), index=False, encoding="utf-8-sig")
     bridge_df.to_csv(os.path.join(output_dir, "4_analysis_bridge.csv"), index=False, encoding="utf-8-sig")
+    pl_excel_path = os.path.join(output_dir, "5_valuation_ready_pl.xlsx")
     export_excel_package(
-        output_path=os.path.join(output_dir, "5_valuation_ready_pl.xlsx"),
+        output_path=pl_excel_path,
         preprocess_df=preprocess_df,
         pre_check_df=pre_check_df,
         standardized_df=standardized_df,
@@ -606,6 +616,7 @@ def save_outputs(
         bridge_df=bridge_df,
         valuation_df=valuation_df,
     )
+    _apply_bilingual_fonts_to_file(pl_excel_path)
     with open(os.path.join(output_dir, "PL重构说明.md"), "w", encoding="utf-8") as f:
         f.write(md_text)
 

@@ -141,8 +141,11 @@ print("    3. 现金流量表转换完成")
 print("-" * 50)
 print("价格数据处理中...")
 
-trans_price_csv(str(raw_files["price"]), "./results/csv/price.csv")
-print("    4. 价格数据转换完成")
+if "price" in raw_files:
+    trans_price_csv(str(raw_files["price"]), "./results/csv/price.csv")
+    print("    4. 价格数据转换完成")
+else:
+    print("    4. 未发现可选的价格文件，已跳过价格数据转换")
 
 print("=" * 50)
 print("Step 1 完成！CSV 文件已保存至 ./results/csv/")

@@ -36,10 +36,13 @@ Step 3/8 — 核心财务指标提取与计算（基础版）
     python run_pipeline.py
 """
 
+import json
+
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
 from excel_utils import apply_bilingual_fonts
+from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
 
 # ── 文件路径配置 ─────────────────────────────────────────────────────────────
 PL_FILE = "./results/csv/pl.csv"
@@ -47,6 +50,75 @@ BS_FILE = "./results/csv/bs.csv"
 CF_FILE = "./results/csv/cf.csv"
 
 OUTPUT_FILE = "./results/Core_Metrics.xlsx"
+
+
+def _build_initial_review_prompt(metrics_df: pd.DataFrame) -> str:
+    return f"""
+You are an A-share equity research analyst. Based only on the financial metrics below,
+write a concise Chinese initial review and infer what type of company this most likely is.
+
+Return valid JSON only with these keys:
+- company_type
+- financial_assessment
+- strengths
+- risks
+- follow_up_questions
+
+Rules:
+1. Write in Chinese.
+2. `company_type` should describe the likely company profile inferred from the numbers,
+   for example heavy-asset manufacturer, consumer brand, cyclical materials company,
+   platform-like business, utility-like operator, etc.
+3. `strengths`, `risks`, and `follow_up_questions` must each be an array of short strings.
+4. Do not invent company history, products, management, or industry facts not supported by the data.
+5. If uncertainty is high, say so explicitly in `company_type` or `financial_assessment`.
+
+Processed Metrics:
+{metrics_df.to_markdown()}
+""".strip()
+
+
+def _build_initial_review_sheet(metrics_df: pd.DataFrame) -> pd.DataFrame:
+    if not deepseek_enabled():
+        return pd.DataFrame(
+            [
+                {"Section": "Status", "Content": "DeepSeek initial review is disabled. Set ENABLE_DEEPSEEK_ANALYSIS=1 to enable it."},
+            ]
+        )
+
+    if not deepseek_configured():
+        return pd.DataFrame(
+            [
+                {"Section": "Status", "Content": "DeepSeek initial review is enabled but DEEPSEEK_API_KEY is not set."},
+            ]
+        )
+
+    try:
+        raw_text = generate_deepseek_analysis(
+            report_context=_build_initial_review_prompt(metrics_df),
+            temperature=0.1,
+            system_prompt=(
+                "You are a careful A-share equity research analyst. "
+                "Return JSON only. No markdown fences. "
+                "Stay grounded in the provided financial metrics."
+            ),
+        )
+        payload = json.loads(raw_text)
+        rows = [
+            {"Section": "Company Type", "Content": str(payload.get("company_type", "")).strip()},
+            {"Section": "Financial Assessment", "Content": str(payload.get("financial_assessment", "")).strip()},
+            {"Section": "Strengths", "Content": "\n".join(payload.get("strengths", []))},
+            {"Section": "Risks", "Content": "\n".join(payload.get("risks", []))},
+            {"Section": "Follow-up Questions", "Content": "\n".join(payload.get("follow_up_questions", []))},
+            {"Section": "Raw Response", "Content": raw_text},
+        ]
+        return pd.DataFrame(rows)
+    except Exception as exc:
+        return pd.DataFrame(
+            [
+                {"Section": "Status", "Content": f"DeepSeek initial review failed: {exc}"},
+            ]
+        )
 
 
 # ── 数据读取与预处理 ─────────────────────────────────────────────────────────
@@ -332,6 +404,7 @@ with pd.ExcelWriter(OUTPUT_FILE, engine="openpyxl") as writer:
     extract_df.to_excel(writer, sheet_name="ExtractData")
     metrics.to_excel(writer, sheet_name="Processed Metrics")
     notes.to_excel(writer, sheet_name="Metric Notes", index=False)
+    _build_initial_review_sheet(metrics).to_excel(writer, sheet_name="AI Initial Review", index=False)
 
 # 应用双语字体（Calibri / 黑体）
 _wb = load_workbook(OUTPUT_FILE)

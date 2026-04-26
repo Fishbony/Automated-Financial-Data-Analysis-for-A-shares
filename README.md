@@ -22,7 +22,7 @@
 │   ├── {ticker}_debt_year.xls          资产负债表
 │   ├── {ticker}_benefit_year.xls       利润表
 │   ├── {ticker}_cash_year.xls          现金流量表
-│   ├── {ticker}_price.xls              年度价格数据
+│   ├── {ticker}_price.xls              年度价格数据（可选）
 │   └── Info.csv                        公司基础信息（总股本、当前股价等）
 │
 ├── results/                            管道输出（不入 Git）
@@ -63,16 +63,30 @@ uv sync
 
 ### 2. 准备数据
 
-将同花顺导出的四个 XLS 文件放入 `rawdata/` 目录，文件名格式为 `{ticker}_{type}.xls`，例如：
+将同花顺导出的原始文件放入 `rawdata/` 目录，文件名格式为 `{ticker}_{type}.xls`。
+
+必需文件：
 
 ```
 rawdata/
 ├── 600406_debt_year.xls
 ├── 600406_benefit_year.xls
 ├── 600406_cash_year.xls
-├── 600406_price.xls
 └── Info.csv
 ```
+
+可选文件：
+
+```text
+rawdata/600406_price.xls
+```
+
+说明：
+
+- `debt_year.xls`、`benefit_year.xls`、`cash_year.xls` 是必需文件
+- `price.xls` 现在是可选文件，缺失时程序会跳过价格转换，不会阻塞主流程
+- `Info.csv` 仍建议保留，因为第 8 步估值会读取其中的总股本、当前股价、公司简称等信息
+- 每次只放一只股票的数据，程序会自动从文件名识别股票代码
 
 `Info.csv` 需包含以下字段（第一列为"项目"，最后一列为数值）：
 
@@ -82,12 +96,23 @@ rawdata/
 | 当前股价 | 12.34 |
 | 公司简称 | 国电南瑞 |
 
-> 每次只放一只股票的数据，管道会自动从文件名识别股票代码。
-
 ### 3. 运行管道
+
+如果你暂时不使用 DeepSeek，直接运行：
 
 ```bash
 python run_pipeline.py
+```
+
+如果你希望启用 DeepSeek，请先在项目根目录创建 `.env`，再运行同样的命令。
+
+最小可用 `.env` 示例：
+
+```dotenv
+ENABLE_DEEPSEEK_ANALYSIS=1
+DEEPSEEK_API_KEY=your_deepseek_api_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
 ```
 
 也可以单独运行某一步骤：
@@ -95,6 +120,8 @@ python run_pipeline.py
 ```bash
 python step1_convert_xls_to_csv.py   # 仅执行 XLS → CSV 转换
 python step2_check_statements.py     # 仅执行三表一致性检验
+python step3_extract_metrics.py      # 生成 Core_Metrics.xlsx（含 AI Initial Review，可选）
+python step4_metrics_report.py       # 生成财务指标增强报告（含 AI 分析补充，可选）
 # ...以此类推
 ```
 
@@ -168,3 +195,69 @@ dependencies = [
     "jupyter>=1.0", "ipykernel>=6.0",
 ]
 ```
+
+---
+
+## DeepSeek 接入说明
+
+当前项目已经支持在本地流程中可选接入 DeepSeek，用于生成财务分析补充内容。
+
+接入后的作用如下：
+
+- `step3_extract_metrics.py`
+  会把 `Processed Metrics` 这个 sheet 的指标表发送给 DeepSeek，生成“财务数据初评 + 公司画像”，并写入 `results/Core_Metrics.xlsx` 的 `AI Initial Review` sheet。
+- `step4_metrics_report.py`
+  会把核心指标摘要、最新年度指标和趋势表发送给 DeepSeek，生成补充分析内容，并追加到 `results/financial_core_metrics_report.md`。
+
+### 1. 配置方式
+
+项目根目录已经提供示例文件 `.env.example`。
+你可以复制一份为 `.env`，并填入自己的真实配置。
+
+示例 `.env` 内容如下：
+
+```dotenv
+ENABLE_DEEPSEEK_ANALYSIS=1
+DEEPSEEK_API_KEY=your_deepseek_api_key
+DEEPSEEK_BASE_URL=https://api.deepseek.com
+DEEPSEEK_MODEL=deepseek-v4-flash
+DEEPSEEK_TIMEOUT=120
+```
+
+说明：
+
+- `ENABLE_DEEPSEEK_ANALYSIS=1`：开启 DeepSeek 分析功能
+- `DEEPSEEK_API_KEY`：你的 DeepSeek API Key
+- `DEEPSEEK_BASE_URL`：DeepSeek 接口地址，默认可用 `https://api.deepseek.com`
+- `DEEPSEEK_MODEL`：调用的模型名称，默认配置为 `deepseek-v4-flash`
+- `DEEPSEEK_TIMEOUT`：接口超时时间，单位为秒
+
+### 2. 自动加载机制
+
+项目中的 `llm_client.py` 已经支持自动读取项目根目录下的 `.env` 文件，
+因此通常不需要再手动执行 PowerShell 的 `$env:...` 命令。
+
+也就是说，只要你已经正确填写 `.env`，直接运行下面的命令即可：
+
+```powershell
+python step3_extract_metrics.py
+```
+
+或者运行完整流程：
+
+```powershell
+python run_pipeline.py
+```
+
+### 3. 失败时的行为
+
+为了避免模型调用影响主流程稳定性，当前实现采用“可选增强”的策略：
+
+- 如果没有启用 `ENABLE_DEEPSEEK_ANALYSIS`，程序仍会正常运行，只是不生成 AI 分析内容
+- 如果没有配置 `DEEPSEEK_API_KEY`，程序仍会继续执行，并在输出结果中写入状态说明
+- 如果 DeepSeek 接口调用失败，程序不会中断主流程，而是把失败原因写入对应输出
+
+### 4. 与 GitHub 提交的关系
+
+`.env` 已加入 `.gitignore`，不会被提交到 GitHub。
+`.env.example` 会保留在仓库中，用来展示配置格式和示例项。

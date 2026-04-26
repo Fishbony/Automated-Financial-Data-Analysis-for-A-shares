@@ -1,4 +1,9 @@
 .venv/
+.env
+.env.*
+!.env.example
+environment.yml
+uv.lock
 
 __pycache__/
 *.pyc

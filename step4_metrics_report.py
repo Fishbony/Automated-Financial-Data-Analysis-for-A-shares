@@ -51,6 +51,7 @@ from openpyxl.chart.series import SeriesLabel
 from openpyxl.styles import Font as XLFont, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from excel_utils import apply_bilingual_fonts
+from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
 
 PL_FILE = "./results/csv/pl.csv"
 BS_FILE = "./results/csv/bs.csv"
@@ -126,6 +127,47 @@ def fmt_pct(x):
     if pd.isna(x):
         return "NaN"
     return f"{x:.2%}"
+
+
+def build_ai_prompt(
+    years: list,
+    checks: pd.DataFrame,
+    analysis: pd.DataFrame,
+    latest: pd.DataFrame,
+    trend: pd.DataFrame,
+    missing_items: list[str],
+) -> str:
+    missing_text = ", ".join(missing_items) if missing_items else "None"
+    return f"""
+Please write a concise Chinese A-share financial analysis memo based only on the data below.
+
+Output requirements:
+1. Use Chinese.
+2. Use these sections exactly:
+   - Executive Summary
+   - Profitability
+   - Cash Flow Quality
+   - Balance Sheet And Risk
+   - Follow-up Questions
+3. Keep the tone neutral and evidence-based.
+4. Do not fabricate company background, industry facts, or management commentary.
+5. If data is missing or noisy, say so explicitly.
+
+Covered years: {years[0]} to {years[-1]}
+Missing items: {missing_text}
+
+Consistency checks:
+{checks.to_markdown()}
+
+Summary analysis:
+{analysis.to_markdown()}
+
+Latest year snapshot:
+{latest.to_markdown()}
+
+Trend table:
+{trend.to_markdown()}
+""".strip()
 
 def _add_charts_sheet(output_path: str, metrics: pd.DataFrame, years: list) -> None:
     """
@@ -484,6 +526,26 @@ def main():
         f"- 缺失科目日志：`{OUTPUT_MISSING}`",
         "",
     ]
+    if deepseek_enabled():
+        lines += ["## AI Analysis Supplement", ""]
+        if deepseek_configured():
+            try:
+                ai_text = generate_deepseek_analysis(
+                    report_context=build_ai_prompt(
+                        years=years,
+                        checks=checks,
+                        analysis=analysis,
+                        latest=latest,
+                        trend=trend,
+                        missing_items=missing_items,
+                    )
+                )
+                lines += [ai_text, ""]
+            except Exception as exc:
+                lines += [f"DeepSeek analysis skipped because the API call failed: {exc}", ""]
+        else:
+            lines += ["DeepSeek analysis is enabled but `DEEPSEEK_API_KEY` is not set.", ""]
+
     Path(OUTPUT_MD).write_text("\n".join(lines), encoding="utf-8")
 
     print(OUTPUT_XLSX, OUTPUT_MD, OUTPUT_MISSING)

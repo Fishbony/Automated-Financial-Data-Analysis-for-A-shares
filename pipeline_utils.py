@@ -41,6 +41,9 @@ REQUIRED_SUFFIXES: Dict[str, str] = {
     "balance_sheet": "_debt_year.xls",
     "profit_loss": "_benefit_year.xls",
     "cash_flow": "_cash_year.xls",
+}
+
+OPTIONAL_SUFFIXES: Dict[str, str] = {
     "price": "_price.xls",
 }
 
@@ -52,7 +55,7 @@ def ensure_output_dirs() -> None:
 
 def detect_ticker(raw_dir: Path = RAW_DIR) -> str:
     tickers = set()
-    for suffix in REQUIRED_SUFFIXES.values():
+    for suffix in list(REQUIRED_SUFFIXES.values()) + list(OPTIONAL_SUFFIXES.values()):
         for path in raw_dir.glob(f"*{suffix}"):
             ticker = path.name[: -len(suffix)]
             if ticker:
@@ -61,7 +64,7 @@ def detect_ticker(raw_dir: Path = RAW_DIR) -> str:
     if not tickers:
         raise ValueError(
             "No valid RoyalFlush export files were found in rawdata/. "
-            "Expected files like 600406_debt_year.xls and 600406_price.xls."
+            "Expected files like 600406_debt_year.xls and 600406_benefit_year.xls."
         )
 
     if len(tickers) > 1:
@@ -92,11 +95,16 @@ def validate_rawdata(raw_dir: Path = RAW_DIR) -> Tuple[str, Dict[str, Path]]:
         else:
             missing.append(path.name)
 
+    for label, suffix in OPTIONAL_SUFFIXES.items():
+        path = raw_dir / f"{ticker}{suffix}"
+        if path.exists():
+            files[label] = path
+
     if missing:
         joined = ", ".join(missing)
         raise FileNotFoundError(
             "Missing required input files in rawdata/: "
-            f"{joined}"
+            f"{joined}. The price file is optional."
         )
 
     return ticker, files

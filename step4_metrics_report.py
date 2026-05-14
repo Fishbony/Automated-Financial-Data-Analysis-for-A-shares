@@ -52,14 +52,17 @@ from openpyxl.styles import Font as XLFont, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from excel_utils import apply_bilingual_fonts
 from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
+from pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
 
-PL_FILE = "./results/csv/pl.csv"
-BS_FILE = "./results/csv/bs.csv"
-CF_FILE = "./results/csv/cf.csv"
+ensure_output_dirs()
 
-OUTPUT_XLSX = "./results/financial_core_metrics_plus.xlsx"
-OUTPUT_MD = "./results/financial_core_metrics_report.md"
-OUTPUT_MISSING = "./results/missing_items_log.csv"
+PL_FILE = str(CSV_DIR / "pl.csv")
+BS_FILE = str(CSV_DIR / "bs.csv")
+CF_FILE = str(CSV_DIR / "cf.csv")
+
+OUTPUT_XLSX = str(METRICS_DIR / "financial_core_metrics_plus.xlsx")
+OUTPUT_MD = str(METRICS_DIR / "financial_core_metrics_report.md")
+OUTPUT_MISSING = str(METRICS_DIR / "missing_items_log.csv")
 
 def load_statement(file_path: str) -> pd.DataFrame:
     df = pd.read_csv(file_path)

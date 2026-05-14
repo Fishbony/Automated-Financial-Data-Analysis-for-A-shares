@@ -35,17 +35,28 @@ import numpy as np
 from pathlib import Path
 from openpyxl import load_workbook
 from excel_utils import apply_bilingual_fonts
+from pipeline_utils import CHECKS_DIR, CSV_DIR, RESULTS_DIR, ensure_output_dirs
 
 # ── 文件路径配置 ────────────────────────────────────────────────────────────
-BS_FILE = "./results/csv/bs.csv"
-CF_FILE = "./results/csv/cf.csv"
-PL_FILE = "./results/csv/pl.csv"
+ensure_output_dirs()
+
+BS_FILE = str(CSV_DIR / "bs.csv")
+CF_FILE = str(CSV_DIR / "cf.csv")
+PL_FILE = str(CSV_DIR / "pl.csv")
 
 OUTPUT_XLSX = "./results/三表一致性检验结果.xlsx"
 OUTPUT_MD   = "./results/三表一致性检验报告.md"
 
 
 # ── 数据读取与预处理 ────────────────────────────────────────────────────────
+
+OUTPUT_XLSX = str(RESULTS_DIR / "三表一致性检验结果.xlsx")
+OUTPUT_MD = str(RESULTS_DIR / "三表一致性检验报告.md")
+
+
+OUTPUT_XLSX = str(CHECKS_DIR / "statement_consistency_checks.xlsx")
+OUTPUT_MD = str(CHECKS_DIR / "statement_consistency_report.md")
+
 
 def load_statement(path: str) -> pd.DataFrame:
     """读取财务报表 CSV，统一将第一列命名为"科目"并转换数值列。

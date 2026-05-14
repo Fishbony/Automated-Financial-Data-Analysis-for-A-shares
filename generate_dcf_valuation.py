@@ -43,9 +43,10 @@ Raw_Data         — 模型关键原始口径备查
 
 import math
 import os
+import argparse
 from datetime import date
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 from openpyxl import Workbook
@@ -54,16 +55,25 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from pipeline_utils import detect_ticker
+from pipeline_utils import (
+    BS_REBUILT_DIR,
+    CF_REBUILT_DIR,
+    PL_REBUILT_DIR,
+    VALUATION_DIR,
+    detect_ticker,
+    find_info_file,
+    prompt_data_dir_with_dialog,
+    resolve_data_dir,
+)
 from excel_utils import apply_bilingual_fonts
 
 
 BASE_DIR = Path(".")
-BS_PATH = BASE_DIR / "results" / "BS_rebuilt_output" / "2_standardized_bs.csv"
-PL_PATH = BASE_DIR / "results" / "PL_rebuilt_output" / "2_standardized_pl.csv"
-CF_PATH = BASE_DIR / "results" / "CF_rebuilt_output" / "2_standardized_cf.csv"
+BS_PATH = BS_REBUILT_DIR / "2_standardized_bs.csv"
+PL_PATH = PL_REBUILT_DIR / "2_standardized_pl.csv"
+CF_PATH = CF_REBUILT_DIR / "2_standardized_cf.csv"
 INFO_PATH = BASE_DIR / "rawdata" / "Info.csv"
-OUTPUT_DIR = BASE_DIR / "results" / "valuation_output"
+OUTPUT_DIR = VALUATION_DIR
 OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
 
 
@@ -101,8 +111,8 @@ def ensure_output_dir() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def detect_company_name(ticker: str) -> str:
-    info_path = BASE_DIR / "rawdata" / "Info.csv"
+def detect_company_name(ticker: str, info_path: Optional[Path] = None) -> str:
+    info_path = info_path or INFO_PATH
     if info_path.exists():
         try:
             info_df = pd.read_csv(info_path, dtype=str)
@@ -117,11 +127,16 @@ def detect_company_name(ticker: str) -> str:
     return ticker
 
 
-def build_historical_dataset() -> Dict[str, object]:
+def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optional[Path] = None) -> Dict[str, object]:
+    data_dir = resolve_data_dir(data_dir)
+    info_path = info_path or find_info_file(data_dir)
+    if info_path is None:
+        raise FileNotFoundError(f"Info.csv not found in {data_dir}.")
+
     bs = pd.read_csv(BS_PATH)
     pl = pd.read_csv(PL_PATH)
     cf = pd.read_csv(CF_PATH)
-    info = pd.read_csv(INFO_PATH)
+    info = pd.read_csv(info_path)
 
     bs_map = load_item_series(bs, "StandardLineItem", "Year", "Value")
     pl_map = load_item_series(pl, "Standard Item", "Year", "Value")
@@ -129,8 +144,8 @@ def build_historical_dataset() -> Dict[str, object]:
 
     years = sorted(set(bs["Year"]).intersection(pl["Year"]).intersection(cf["Year"]))
     years = [int(y) for y in years]
-    ticker = detect_ticker(BASE_DIR / "rawdata")
-    company_name = detect_company_name(ticker)
+    ticker = detect_ticker(data_dir)
+    company_name = detect_company_name(ticker, info_path)
     valuation_date = date.today().isoformat()
 
     revenue = get_series(pl_map, "Revenue", years)
@@ -1066,9 +1081,34 @@ def build_workbook(data: Dict[str, object]) -> Workbook:
     return wb
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Generate the DCF valuation workbook.")
+    parser.add_argument(
+        "data_dir",
+        nargs="?",
+        default=None,
+        help="Directory containing Info.csv and the original statement files. If omitted, a folder picker will open.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        dest="data_dir_flag",
+        default=None,
+        help="Same as positional data_dir.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
+    data_dir_value = args.data_dir_flag or args.data_dir
+    data_dir = resolve_data_dir(data_dir_value) if data_dir_value else prompt_data_dir_with_dialog()
+    info_path = find_info_file(data_dir)
+    if info_path is None:
+        print(f"Info.csv not found in {data_dir}. Skipping DCF valuation.")
+        return
+
     ensure_output_dir()
-    data = build_historical_dataset()
+    data = build_historical_dataset(data_dir=data_dir, info_path=info_path)
     wb = build_workbook(data)
     apply_bilingual_fonts(wb)
     wb.save(OUTPUT_PATH)

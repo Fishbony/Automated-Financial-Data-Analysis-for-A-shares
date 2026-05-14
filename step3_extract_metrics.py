@@ -43,13 +43,16 @@ import numpy as np
 from openpyxl import load_workbook
 from excel_utils import apply_bilingual_fonts
 from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
+from pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
 
 # ── 文件路径配置 ─────────────────────────────────────────────────────────────
-PL_FILE = "./results/csv/pl.csv"
-BS_FILE = "./results/csv/bs.csv"
-CF_FILE = "./results/csv/cf.csv"
+ensure_output_dirs()
 
-OUTPUT_FILE = "./results/Core_Metrics.xlsx"
+PL_FILE = str(CSV_DIR / "pl.csv")
+BS_FILE = str(CSV_DIR / "bs.csv")
+CF_FILE = str(CSV_DIR / "cf.csv")
+
+OUTPUT_FILE = str(METRICS_DIR / "Core_Metrics.xlsx")
 
 
 def _build_initial_review_prompt(metrics_df: pd.DataFrame) -> str:

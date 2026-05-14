@@ -1,97 +1,111 @@
 """
-run_pipeline — 一键执行完整财务分析管道
-========================================
-按顺序调用管道中的全部 8 个步骤，从原始同花顺 XLS 数据出发，
-一键生成三表标准化输出、核心指标报告和 DCF 估值模型。
+Run the full A-share financial analysis pipeline.
 
-使用前提
---------
-1. 在 rawdata/ 目录下放置同花顺导出的四个 XLS 文件：
-   - {ticker}_debt_year.xls    资产负债表
-   - {ticker}_benefit_year.xls 利润表
-   - {ticker}_cash_year.xls    现金流量表
-   - {ticker}_price.xls        年度价格数据
-2. 在 rawdata/Info.csv 中填写：总股本、当前股价、公司简称
-
-管道步骤
---------
-1. step1_convert_xls_to_csv.py     同花顺 XLS → 标准化 CSV（保留最近 10 年）
-2. step2_check_statements.py       三表一致性检验（5 项勾稽）
-3. step3_extract_metrics.py        核心财务指标提取与计算
-4. step4_metrics_report.py         完整财务指标报告（含 YoY / CAGR / ROE）
-5. rebuild_balance_sheet.py        资产负债表标准化重构（投行口径）
-6. rebuild_income_statement.py     利润表标准化重构
-7. rebuild_cash_flow.py            现金流量表标准化重构
-8. generate_dcf_valuation.py       DCF 估值模型生成（含相对估值）
-
-运行方式
---------
+Usage:
     python run_pipeline.py
+    python run_pipeline.py "D:/path/to/data"
+    python run_pipeline.py --data-dir "D:/path/to/data"
 """
 
 from __future__ import annotations
 
+import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
 
-from pipeline_utils import ensure_output_dirs, validate_rawdata
+from pipeline_utils import (
+    ensure_output_dirs,
+    find_info_file,
+    prompt_data_dir_with_dialog,
+    resolve_data_dir,
+    set_results_dir,
+    validate_rawdata,
+)
 
 
 SCRIPTS = [
-    "step1_convert_xls_to_csv.py",      # Step 1: XLS → CSV（同花顺原始数据清洗）
-    "step2_check_statements.py",         # Step 2: 三表一致性检验
-    "step3_extract_metrics.py",          # Step 3: 核心指标提取与计算（Core_Metrics.xlsx）
-    "step4_metrics_report.py",           # Step 4: 完整财务指标报告（含 Markdown）
-    "rebuild_balance_sheet.py",          # Step 5: 资产负债表标准化重构
-    "rebuild_income_statement.py",       # Step 6: 利润表标准化重构
-    "rebuild_cash_flow.py",              # Step 7: 现金流量表标准化重构
-    "generate_dcf_valuation.py",         # Step 8: DCF 估值模型
+    "step1_convert_xls_to_csv.py",
+    "step2_check_statements.py",
+    "step3_extract_metrics.py",
+    "step4_metrics_report.py",
+    "rebuild_balance_sheet.py",
+    "rebuild_income_statement.py",
+    "rebuild_cash_flow.py",
+    "generate_dcf_valuation.py",
+    "generate_html_report.py",
 ]
 
 
-def run_script(script_name: str) -> None:
-    """执行单个管道脚本，失败时终止整个管道。
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run the A-share financial analysis pipeline.")
+    parser.add_argument(
+        "data_dir",
+        nargs="?",
+        default=None,
+        help="Directory containing the statement XLS files. If omitted, a folder picker will open.",
+    )
+    parser.add_argument(
+        "--data-dir",
+        dest="data_dir_flag",
+        default=None,
+        help="Same as positional data_dir.",
+    )
+    return parser.parse_args()
 
-    Parameters
-    ----------
-    script_name : str
-        要执行的脚本文件名（相对当前工作目录）
 
-    Raises
-    ------
-    SystemExit
-        脚本返回非 0 退出码时终止管道
-    """
+def run_script(script_name: str, data_dir: Path | None = None) -> None:
     print(f"\n[RUN] {script_name}")
-    completed = subprocess.run([sys.executable, script_name], check=False)
+    command = [sys.executable, script_name]
+    if script_name in {"step1_convert_xls_to_csv.py", "generate_dcf_valuation.py", "generate_html_report.py"} and data_dir is not None:
+        command.extend(["--data-dir", str(data_dir)])
+    env = os.environ.copy()
+    completed = subprocess.run(command, check=False, env=env)
     if completed.returncode != 0:
         raise SystemExit(f"Pipeline stopped because {script_name} failed.")
 
 
 def main() -> None:
-    """验证输入数据后按序执行全部管道步骤。"""
-    ensure_output_dirs()
+    args = parse_args()
+    raw_data_dir = args.data_dir_flag or args.data_dir
+    data_dir = resolve_data_dir(raw_data_dir) if raw_data_dir else prompt_data_dir_with_dialog()
+    data_dir = data_dir.expanduser().resolve()
+    results_dir = set_results_dir(data_dir / "results")
 
     try:
-        ticker, raw_files = validate_rawdata()
+        ticker, raw_files = validate_rawdata(data_dir)
     except Exception as exc:
         raise SystemExit(f"Input validation failed: {exc}") from exc
+
+    ensure_output_dirs()
 
     print("Automated Financial Data Analysis for A-shares")
     print("==============================================")
     print(f"Ticker detected: {ticker}")
+    print(f"Input directory: {data_dir}")
+    print(f"Output directory: {results_dir}")
     print("Input files:")
     for path in raw_files.values():
         print(f"  - {path}")
 
+    info_file = find_info_file(data_dir)
+    if info_file is None:
+        print("\nInfo.csv not found in the input directory. Step 8 (DCF valuation) and Step 9 (HTML dashboard) will be skipped.")
+    else:
+        print(f"  - {info_file}")
+
     for script_name in SCRIPTS:
+        if script_name == "generate_dcf_valuation.py" and info_file is None:
+            continue
         if not Path(script_name).exists():
             raise SystemExit(f"Required script not found: {script_name}")
-        run_script(script_name)
+        if script_name == "generate_html_report.py" and info_file is None:
+            continue
+        run_script(script_name, data_dir)
 
     print("\nPipeline completed successfully.")
-    print("Check the results/ directory for CSV, Excel and Markdown outputs.")
+    print(f"Check {results_dir} for CSV, Excel, Markdown and HTML outputs.")
 
 
 if __name__ == "__main__":

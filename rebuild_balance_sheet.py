@@ -61,9 +61,10 @@ from typing import Dict, List, Tuple
 import pandas as pd
 from openpyxl import load_workbook
 from excel_utils import apply_bilingual_fonts
+from pipeline_utils import BS_REBUILT_DIR, CSV_DIR
 
 
-OUTPUT_DIR = "./results/BS_rebuilt_output"
+OUTPUT_DIR = str(BS_REBUILT_DIR)
 
 
 def ensure_output_dir(output_dir: str) -> None:
@@ -851,7 +852,7 @@ def save_outputs(
         f.write(md_text)
 
 
-def main(input_csv: str = "./results/csv/bs.csv", output_dir: str = OUTPUT_DIR) -> None:
+def main(input_csv: str = str(CSV_DIR / "bs.csv"), output_dir: str = OUTPUT_DIR) -> None:
     df, item_col, year_cols = load_bs_csv(input_csv)
     preprocess_df, pre_check_df = preprocess_bs(df, item_col, year_cols)
     rules = build_mapping_rules()

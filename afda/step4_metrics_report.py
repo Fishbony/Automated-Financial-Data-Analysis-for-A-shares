@@ -50,9 +50,9 @@ from openpyxl.chart import BarChart, LineChart, Reference
 from openpyxl.chart.series import SeriesLabel
 from openpyxl.styles import Font as XLFont, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
-from excel_utils import apply_bilingual_fonts
-from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
-from pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
+from afda.excel_utils import apply_bilingual_fonts
+from afda.llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
+from afda.pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
 
 ensure_output_dirs()
 
@@ -70,6 +70,7 @@ def load_statement(file_path: str) -> pd.DataFrame:
     first_col = df.columns[0]
     df.rename(columns={first_col: "Item"}, inplace=True)
     df["Item"] = df["Item"].astype(str).str.replace("\ufeff", "", regex=False).str.strip()
+    df = df[~df["Item"].isin(["", "nan", "None"])].copy()
     df.columns = ["Item"] + [str(c).strip() for c in df.columns[1:]]
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")

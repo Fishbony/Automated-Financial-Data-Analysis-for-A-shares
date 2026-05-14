@@ -67,8 +67,8 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 from openpyxl import load_workbook
-from excel_utils import apply_bilingual_fonts
-from pipeline_utils import CF_REBUILT_DIR, CSV_DIR
+from afda.excel_utils import apply_bilingual_fonts
+from afda.pipeline_utils import CF_REBUILT_DIR, CSV_DIR
 
 
 OUTPUT_DIR = str(CF_REBUILT_DIR)
@@ -106,6 +106,7 @@ def load_cf_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
         raise ValueError("现金流量表 CSV 未识别到年份列。")
     df = df.rename(columns={first_col: "科目"})
     df["科目"] = df["科目"].apply(normalize_item_name)
+    df = df[df["科目"] != ""].copy()
     df = to_numeric_frame(df, year_cols)
     return df, "科目", year_cols
 

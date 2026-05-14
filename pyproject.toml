@@ -13,6 +13,9 @@ dependencies = [
     "ipykernel>=6.0",
 ]
 
+[project.scripts]
+afda-run = "afda.run_pipeline:main"
+
 [tool.uv]
 constraint-dependencies = [
     "nbconvert<7.17",

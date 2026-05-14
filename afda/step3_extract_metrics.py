@@ -41,9 +41,9 @@ import json
 import pandas as pd
 import numpy as np
 from openpyxl import load_workbook
-from excel_utils import apply_bilingual_fonts
-from llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
-from pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
+from afda.excel_utils import apply_bilingual_fonts
+from afda.llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
+from afda.pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
 
 # ── 文件路径配置 ─────────────────────────────────────────────────────────────
 ensure_output_dirs()
@@ -143,6 +143,7 @@ def load_statement(file_path: str) -> pd.DataFrame:
     df = df.copy()
     df.rename(columns={df.columns[0]: "Item"}, inplace=True)
     df["Item"] = df["Item"].astype(str).str.strip()
+    df = df[~df["Item"].isin(["", "nan", "None"])].copy()
     df.columns = ["Item"] + [str(c).strip() for c in df.columns[1:]]
     for col in df.columns[1:]:
         df[col] = pd.to_numeric(df[col], errors="coerce")

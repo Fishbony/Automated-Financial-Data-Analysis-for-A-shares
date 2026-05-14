@@ -60,8 +60,8 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 from openpyxl import load_workbook
-from excel_utils import apply_bilingual_fonts
-from pipeline_utils import BS_REBUILT_DIR, CSV_DIR
+from afda.excel_utils import apply_bilingual_fonts
+from afda.pipeline_utils import BS_REBUILT_DIR, CSV_DIR
 
 
 OUTPUT_DIR = str(BS_REBUILT_DIR)
@@ -103,6 +103,7 @@ def load_bs_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
         raise ValueError("未识别到年份列，请检查CSV格式。")
     df = df.rename(columns={first_col: "原始科目"})
     df["原始科目"] = df["原始科目"].apply(normalize_item_name)
+    df = df[df["原始科目"] != ""].copy()
     df = to_numeric_frame(df, year_cols)
     return df, "原始科目", year_cols
 

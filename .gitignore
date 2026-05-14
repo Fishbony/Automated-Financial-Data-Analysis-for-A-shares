@@ -21,12 +21,13 @@ Thumbs.db
 results/
 !results/.gitkeep
 
-rawdata/*.xls
-rawdata/*.xlsx
-rawdata/*.csv
-!rawdata/.gitkeep
-!rawdata/Info.csv
-!rawdata/600406_debt_year.xls
-!rawdata/600406_benefit_year.xls
-!rawdata/600406_cash_year.xls
-!rawdata/600406_price.xls
+demo/rawdata/results/
+demo/rawdata/*.xls
+demo/rawdata/*.xlsx
+demo/rawdata/*.csv
+!demo/rawdata/.gitkeep
+!demo/rawdata/Info.csv
+!demo/rawdata/600406_debt_year.xls
+!demo/rawdata/600406_benefit_year.xls
+!demo/rawdata/600406_cash_year.xls
+!demo/rawdata/600406_price.xls

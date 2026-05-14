@@ -18,7 +18,8 @@ from pathlib import Path
 import pandas as pd
 import xlrd
 
-from pipeline_utils import CSV_DIR, ensure_output_dirs, prompt_data_dir_with_dialog, validate_rawdata
+from afda.input_validation import require_valid_input
+from afda.pipeline_utils import CSV_DIR, ensure_output_dirs, prompt_data_dir_with_dialog, validate_rawdata
 
 
 OUTPUT_DIR = CSV_DIR
@@ -40,8 +41,10 @@ def trans_csv(file_name: str, new_name: str) -> None:
 
     df.to_csv(new_name)
     df = pd.read_csv(new_name, index_col=0)
-    df.dropna(axis=0, how="any", inplace=True)
-    df.astype(int)
+    # Keep rows with partial missing values so the converted CSV stays easy to
+    # audit against the original RoyalFlush export. Downstream scripts filter
+    # only blank item-name rows before calculation.
+    # df.dropna(axis=0, how="any", inplace=True)
 
     df = df.iloc[:, :10]
     df = df[df.columns[::-1]]
@@ -98,6 +101,8 @@ def main() -> None:
 
     print("Step 1: convert RoyalFlush XLS exports to CSV")
     print("=" * 50)
+
+    require_valid_input(data_dir)
 
     try:
         stocks_ticker, raw_files = validate_rawdata(data_dir)

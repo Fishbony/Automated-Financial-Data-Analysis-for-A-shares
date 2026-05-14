@@ -15,7 +15,7 @@ apply_bilingual_fonts(wb, english_font, chinese_font, size)
 使用示例
 --------
     from openpyxl import load_workbook
-    from excel_utils import apply_bilingual_fonts
+    from afda.excel_utils import apply_bilingual_fonts
 
     wb = load_workbook("output.xlsx")
     apply_bilingual_fonts(wb)

@@ -28,7 +28,7 @@ Raw_Data         — 模型关键原始口径备查
 - results/BS_rebuilt_output/2_standardized_bs.csv
 - results/PL_rebuilt_output/2_standardized_pl.csv
 - results/CF_rebuilt_output/2_standardized_cf.csv
-- rawdata/Info.csv     （需含：总股本、当前股价、公司简称）
+- Info.csv     （需含：总股本、当前股价、公司简称）
 
 输出
 ----
@@ -55,7 +55,7 @@ from openpyxl.formatting.rule import CellIsRule
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from pipeline_utils import (
+from afda.pipeline_utils import (
     BS_REBUILT_DIR,
     CF_REBUILT_DIR,
     PL_REBUILT_DIR,
@@ -65,14 +65,15 @@ from pipeline_utils import (
     prompt_data_dir_with_dialog,
     resolve_data_dir,
 )
-from excel_utils import apply_bilingual_fonts
+from afda.excel_utils import apply_bilingual_fonts
+from afda.valuation_config import get_multiple, load_valuation_config
 
 
 BASE_DIR = Path(".")
 BS_PATH = BS_REBUILT_DIR / "2_standardized_bs.csv"
 PL_PATH = PL_REBUILT_DIR / "2_standardized_pl.csv"
 CF_PATH = CF_REBUILT_DIR / "2_standardized_cf.csv"
-INFO_PATH = BASE_DIR / "rawdata" / "Info.csv"
+INFO_PATH = BASE_DIR / "demo" / "rawdata" / "Info.csv"
 OUTPUT_DIR = VALUATION_DIR
 OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
 
@@ -147,6 +148,7 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
     ticker = detect_ticker(data_dir)
     company_name = detect_company_name(ticker, info_path)
     valuation_date = date.today().isoformat()
+    valuation_config = load_valuation_config(data_dir)
 
     revenue = get_series(pl_map, "Revenue", years)
     operating_profit = get_series(pl_map, "Operating Profit", years)
@@ -248,6 +250,7 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         "base_da_ratio": round(base_da_ratio, 4),
         "base_capex_ratio": round(base_capex_ratio, 4),
         "base_nwc_ratio": round(base_nwc_ratio, 4),
+        "valuation_config": valuation_config,
     }
 
 
@@ -287,6 +290,9 @@ def add_note(ws, cell_ref: str, text: str) -> None:
 def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws = wb.active
     ws.title = "Summary"
+    config = data["valuation_config"]
+    dcf_weight = float(config["dcf"]["dcf_weight"])
+    relative_weight = float(config["dcf"]["relative_weight"])
     ws["A1"] = "估值总览"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:J1")
@@ -304,6 +310,7 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ("股东权益价值", "=DCF!B20"),
         ("每股内在价值", "=DCF!B21"),
         ("相对当前股价空间", "=DCF!B22"),
+        ("安全边际", "=DCF!B23"),
     ]
     ws["A3"] = "核心结果"
     apply_header_style(ws["A3"])
@@ -325,8 +332,8 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         apply_header_style(ws[ref])
 
     target_rows = [
-        (4, "DCF", "=DCF!B21*0.85", "=DCF!B21", "=DCF!B21*1.15", 0.60),
-        (5, "Relative Valuation", "=MIN(Comparable!C20:C23)", "=Comparable!C25", "=MAX(Comparable!E20:E23)", 0.40),
+        (4, "DCF", "=DCF!B21*0.85", "=DCF!B21", "=DCF!B21*1.15", dcf_weight),
+        (5, "Relative Valuation", "=MIN(Comparable!C20:C24)", "=Comparable!C25", "=MAX(Comparable!E20:E24)", relative_weight),
     ]
     for row, method, low_formula, mid_formula, high_formula, weight in target_rows:
         ws[f"D{row}"] = method
@@ -378,6 +385,7 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["B10"].number_format = "#,##0"     # 股东权益价值（元，整数带千分位）
     ws["B11"].number_format = "0.00"      # 每股内在价值（元/股，两位小数）
     ws["B12"].number_format = "0.0%"      # 相对当前股价空间（百分比）
+    ws["B13"].number_format = "0.0%"      # 安全边际（百分比）
     for ref in ["E4", "F4", "G4", "I4", "E5", "F5", "G5", "I5", "E7", "F7", "G7", "I7"]:
         ws[ref].number_format = "0.00"
     for ref in ["H4", "H5", "H7", "E9", "F9", "G9"]:
@@ -436,6 +444,8 @@ def create_historical_sheet(wb: Workbook, data: Dict[str, object]) -> None:
 
 def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws = wb.create_sheet("Assumptions")
+    config = data["valuation_config"]
+    dcf_config = config["dcf"]
     ws["A1"] = "DCF假设区"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:H1")
@@ -444,8 +454,8 @@ def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ("B3", data["shares_outstanding"], "总股本"),
         ("B4", data["current_price"], "当前股价"),
         ("B5", data["cash"][-1] - data["short_debt"][-1] - data["long_debt"][-1], "净现金/(净债务)"),
-        ("B6", 0.10, "WACC"),
-        ("B7", 0.03, "永续增长率"),
+        ("B6", float(dcf_config["wacc"]), "WACC"),
+        ("B7", float(dcf_config["terminal_growth"]), "永续增长率"),
         ("B8", data["minority_interest"][-1], "少数股东权益"),
         ("B9", data["long_term_investments"][-1], "长期金融投资加回"),
         ("B10", data["non_op_current_assets"][-1], "非经营流动资产加回"),
@@ -628,6 +638,7 @@ def create_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ("B20", "B14+B16+B17+B18+B19", "股东权益价值"),
         ("B21", "B20/Assumptions!B3", "每股内在价值"),
         ("B22", "B21/Assumptions!B4-1", "相对当前股价空间"),
+        ("B23", "IF(B21>0,1-Assumptions!B4/B21,0)", "安全边际"),
     ]
     for cell_ref, formula_body, label in rows:
         row = int(cell_ref[1:])
@@ -646,18 +657,20 @@ def create_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ws[ref].number_format = '#,##0.00'
     ws["B21"].number_format = "0.00"
     ws["B22"].number_format = "0.0%"
+    ws["B23"].number_format = "0.0%"
     ws.freeze_panes = "A4"
     set_col_widths(ws, {"A": 28, "B": 16, "C": 18, "E": 52})
 
 
-def create_sensitivity_sheet(wb: Workbook) -> None:
+def create_sensitivity_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws = wb.create_sheet("Sensitivity")
     ws["A1"] = "WACC / 永续增长率 敏感性"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:J1")
 
-    growths = [0.01, 0.02, 0.03, 0.04, 0.05]
-    waccs = [0.08, 0.09, 0.10, 0.11, 0.12]
+    sensitivity = data["valuation_config"].get("sensitivity", {})
+    growths = [float(x) for x in sensitivity.get("terminal_growth", [0.01, 0.02, 0.03, 0.04, 0.05])]
+    waccs = [float(x) for x in sensitivity.get("wacc", [0.08, 0.09, 0.10, 0.11, 0.12])]
 
     ws["A3"] = "g \\ WACC"
     apply_header_style(ws["A3"])
@@ -691,6 +704,7 @@ def create_sensitivity_sheet(wb: Workbook) -> None:
 
 def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws = wb.create_sheet("Comparable")
+    config = data["valuation_config"]
     ws["A1"] = "相对估值"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:J1")
@@ -723,12 +737,10 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ws[f"{col}3"] = header
         apply_header_style(ws[f"{col}3"])
 
-    assumption_rows = [
-        (4, "PE", [18.0, 22.0, 26.0], "x"),
-        (5, "PB", [3.0, 3.8, 4.5], "x"),
-        (6, "EV/EBIT", [16.0, 20.0, 24.0], "x"),
-        (7, "EV/EBITDA", [13.0, 16.0, 19.0], "x"),
-    ]
+    assumption_rows = []
+    for row, label in [(4, "PE"), (5, "PB"), (6, "PS"), (7, "EV/EBIT"), (8, "EV/EBITDA")]:
+        multiple = get_multiple(config, label)
+        assumption_rows.append((row, label, [multiple["low"], multiple["mid"], multiple["high"]], "x"))
     for row, label, vals, _ in assumption_rows:
         ws[f"E{row}"] = label
         for col, val in zip(["F", "G", "H"], vals):
@@ -744,8 +756,9 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     current_metric_rows = [
         (13, "归母净利润", data["parent_net_profit"][-1], "TTM近似采用2024A", "=B6/B13"),
         (14, "股东权益", 0.0, "2024A Total Equity", ""),
-        (15, "EBIT", data["ebit"][-1], "2024A", "=B9/B15"),
-        (16, "EBITDA", data["ebit"][-1] + data["depreciation"][-1] + data["amortization"][-1], "EBIT + D&A", "=B9/B16"),
+        (15, "营业收入", data["revenue"][-1], "2024A Revenue", "=B6/B15"),
+        (16, "EBIT", data["ebit"][-1], "2024A", "=B9/B16"),
+        (17, "EBITDA", data["ebit"][-1] + data["depreciation"][-1] + data["amortization"][-1], "EBIT + D&A", "=B9/B17"),
     ]
     # Overwrite book value using BS-based equity instead of placeholder market cap.
     book_value = (
@@ -769,8 +782,9 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
 
     ws["D13"] = "PE"
     ws["D14"] = "PB"
-    ws["D15"] = "EV/EBIT"
-    ws["D16"] = "EV/EBITDA"
+    ws["D15"] = "PS"
+    ws["D16"] = "EV/EBIT"
+    ws["D17"] = "EV/EBITDA"
 
     ws["A19"] = "相对估值推导股价"
     apply_header_style(ws["A19"])
@@ -794,17 +808,22 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
 
     ev_bridge = "-$B$7-$B$8+Assumptions!$B$9+Assumptions!$B$10"
     ws["B22"] = "EV/EBIT"
-    ws["C22"] = f"=((F6*$B$15){ev_bridge})/$B$5"
-    ws["D22"] = f"=((G6*$B$15){ev_bridge})/$B$5"
-    ws["E22"] = f"=((H6*$B$15){ev_bridge})/$B$5"
+    ws["C22"] = f"=((F7*$B$16){ev_bridge})/$B$5"
+    ws["D22"] = f"=((G7*$B$16){ev_bridge})/$B$5"
+    ws["E22"] = f"=((H7*$B$16){ev_bridge})/$B$5"
 
     ws["B23"] = "EV/EBITDA"
-    ws["C23"] = f"=((F7*$B$16){ev_bridge})/$B$5"
-    ws["D23"] = f"=((G7*$B$16){ev_bridge})/$B$5"
-    ws["E23"] = f"=((H7*$B$16){ev_bridge})/$B$5"
+    ws["C23"] = f"=((F8*$B$17){ev_bridge})/$B$5"
+    ws["D23"] = f"=((G8*$B$17){ev_bridge})/$B$5"
+    ws["E23"] = f"=((H8*$B$17){ev_bridge})/$B$5"
+
+    ws["B24"] = "PS"
+    ws["C24"] = "=(F6*$B$15)/$B$5"
+    ws["D24"] = "=(G6*$B$15)/$B$5"
+    ws["E24"] = "=(H6*$B$15)/$B$5"
 
     ws["B25"] = "综合参考价"
-    ws["C25"] = "=AVERAGE(D20:D23)"
+    ws["C25"] = "=AVERAGE(D20:D24)"
     ws["D25"] = "相对估值中性情景均值"
     apply_formula_style(ws["C25"])
 
@@ -813,21 +832,24 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["D26"] = "相对当前股价"
     apply_formula_style(ws["C26"])
 
-    add_note(ws, "A28", "F:H 为可编辑可比倍数假设；C:E 会自动反推对应股价。")
+    add_note(ws, "A29", "F:H 为可编辑可比倍数假设；C:E 会自动反推对应股价。")
     ws.freeze_panes = "A4"
     set_col_widths(ws, {"A": 18, "B": 16, "C": 24, "D": 14, "E": 14, "F": 10, "G": 10, "H": 10})
 
-    for ref in ["B4", "C20", "D20", "E20", "C21", "D21", "E21", "C22", "D22", "E22", "C23", "D23", "E23", "C25"]:
+    for ref in ["B4", "C20", "D20", "E20", "C21", "D21", "E21", "C22", "D22", "E22", "C23", "D23", "E23", "C24", "D24", "E24", "C25"]:
         ws[ref].number_format = "0.00"
     ws["C26"].number_format = "0.0%"
-    for ref in ["B5", "B6", "B7", "B8", "B9", "B13", "B14", "B15", "B16"]:
+    for ref in ["B5", "B6", "B7", "B8", "B9", "B13", "B14", "B15", "B16", "B17"]:
         ws[ref].number_format = '#,##0.00'
-    for ref in ["E13", "E14", "E15", "E16"]:
+    for ref in ["E13", "E14", "E15", "E16", "E17"]:
         ws[ref].number_format = "0.00x"
 
 
 def create_investment_thesis_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws = wb.create_sheet("Investment_Thesis")
+    config = data["valuation_config"]
+    dcf_weight = float(config["dcf"]["dcf_weight"])
+    relative_weight = float(config["dcf"]["relative_weight"])
     ws["A1"] = "投资评级与核心观点"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:J1")
@@ -860,7 +882,7 @@ def create_investment_thesis_sheet(wb: Workbook, data: Dict[str, object]) -> Non
     ws["D6"] = "估值结论"
     ws["E6"] = '=IF(B7>=0.15,"当前股价相对综合估值仍有明显修复空间",IF(B7>=-0.10,"当前股价与模型估值大致匹配","当前股价已高于模型中性估值"))'
     ws["D7"] = "估值方法"
-    ws["E7"] = "DCF 60% + Relative 40%"
+    ws["E7"] = f"DCF {dcf_weight:.0%} + Relative {relative_weight:.0%}"
     ws["D8"] = "目标价区间"
     ws["E8"] = '=TEXT(Summary!E7,"0.00")&" - "&TEXT(Summary!G7,"0.00")'
     ws["D9"] = "评级说明"
@@ -1072,7 +1094,7 @@ def build_workbook(data: Dict[str, object]) -> Workbook:
     create_assumptions_sheet(wb, data)
     create_forecast_sheet(wb, data)
     create_dcf_sheet(wb, data)
-    create_sensitivity_sheet(wb)
+    create_sensitivity_sheet(wb, data)
     create_comparable_sheet(wb, data)
     create_investment_thesis_sheet(wb, data)
     create_charts_sheet(wb, data)

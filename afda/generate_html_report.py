@@ -23,7 +23,7 @@ from openpyxl import load_workbook
 
 
 OUTPUT_FILE_NAME = "financial_dcf_dashboard.html"
-LOCAL_ECHARTS_SOURCE = Path(__file__).resolve().parent / "assets" / "echarts.min.js"
+LOCAL_ECHARTS_SOURCE = Path(__file__).resolve().parents[1] / "assets" / "echarts.min.js"
 
 
 def parse_args() -> argparse.Namespace:
@@ -39,7 +39,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def configure_paths(data_dir_value: Optional[str]) -> Path:
-    from pipeline_utils import prompt_data_dir_with_dialog, resolve_data_dir, set_results_dir
+    from afda.pipeline_utils import prompt_data_dir_with_dialog, resolve_data_dir, set_results_dir
 
     data_dir = resolve_data_dir(data_dir_value) if data_dir_value else prompt_data_dir_with_dialog()
     data_dir = data_dir.expanduser().resolve()
@@ -48,8 +48,8 @@ def configure_paths(data_dir_value: Optional[str]) -> Path:
 
 
 def load_dataset(data_dir: Path) -> Dict[str, object]:
-    from generate_dcf_valuation import build_historical_dataset
-    from pipeline_utils import find_info_file
+    from afda.generate_dcf_valuation import build_historical_dataset
+    from afda.pipeline_utils import find_info_file
 
     info_path = find_info_file(data_dir)
     if info_path is None:
@@ -70,12 +70,13 @@ def as_float(value: object, fallback: float = 0.0) -> float:
 
 
 def read_assumptions(data: Dict[str, object], workbook_path: Path) -> Dict[str, object]:
+    config = data["valuation_config"]
     assumptions = {
         "shares_outstanding": float(data["shares_outstanding"]),
         "current_price": float(data["current_price"]),
         "net_cash": float(data["cash"][-1] - data["short_debt"][-1] - data["long_debt"][-1]),
-        "wacc": 0.10,
-        "terminal_growth": 0.03,
+        "wacc": float(config["dcf"]["wacc"]),
+        "terminal_growth": float(config["dcf"]["terminal_growth"]),
         "minority_interest": float(data["minority_interest"][-1]),
         "long_term_investments": float(data["long_term_investments"][-1]),
         "non_op_current_assets": float(data["non_op_current_assets"][-1]),
@@ -174,6 +175,7 @@ def compute_dcf(data: Dict[str, object], assumptions: Dict[str, object]) -> Dict
     intrinsic_price = equity_value / float(assumptions["shares_outstanding"]) if assumptions["shares_outstanding"] else 0.0
     current_price = float(assumptions["current_price"])
     upside = intrinsic_price / current_price - 1 if current_price else 0.0
+    safety_margin = 1 - current_price / intrinsic_price if intrinsic_price > 0 else 0.0
     return {
         "forecast_rows": forecast_rows,
         "pv_fcff": pv_fcff,
@@ -183,6 +185,7 @@ def compute_dcf(data: Dict[str, object], assumptions: Dict[str, object]) -> Dict
         "equity_value": equity_value,
         "intrinsic_price": intrinsic_price,
         "upside": upside,
+        "safety_margin": safety_margin,
     }
 
 
@@ -292,7 +295,7 @@ def build_html(data: Dict[str, object], assumptions: Dict[str, object], dcf: Dic
 
     cards = [
         ("当前股价", f"{assumptions['current_price']:.2f}", "来自 Info.csv / Assumptions"),
-        ("DCF 每股内在价值", f"{dcf['intrinsic_price']:.2f}", f"较现价 {percent(dcf['upside'])}"),
+        ("DCF 每股内在价值", f"{dcf['intrinsic_price']:.2f}", f"安全边际 {percent(dcf['safety_margin'])}"),
         ("企业价值 EV", money(dcf["enterprise_value"]), "5年 FCFF + Terminal Value"),
         (f"{years[-1]}A 营收", money(revenue[-1]), f"EBIT Margin {percent(ebit_margin[-1])}"),
         (f"{years[-1]}A 经营现金流", money(cfo[-1]), f"FCFF Proxy {money(fcff[-1])}"),
@@ -432,6 +435,7 @@ def build_html(data: Dict[str, object], assumptions: Dict[str, object], dcf: Dic
           <div><span class="note">DCF 每股内在价值</span><div id="valuationPrice" class="kpi-large"></div></div>
           <div><span class="note">相对当前股价空间</span><div id="valuationUpside" class="kpi-large"></div></div>
           <div><span class="note">企业价值 EV</span><div id="valuationEv" class="kpi-large"></div></div>
+          <div><span class="note">安全边际</span><div id="valuationMos" class="kpi-large"></div></div>
         </div>
       </section>
 
@@ -522,7 +526,8 @@ def build_html(data: Dict[str, object], assumptions: Dict[str, object], dcf: Dic
       const equityValue = enterpriseValue + a.net_cash - a.minority_interest + a.long_term_investments + a.non_op_current_assets;
       const intrinsicPrice = a.shares_outstanding ? equityValue / a.shares_outstanding : 0;
       const upside = a.current_price ? intrinsicPrice / a.current_price - 1 : 0;
-      return {{ rows, pvFcff, pvTerminal, terminalValue, enterpriseValue, equityValue, intrinsicPrice, upside }};
+      const safetyMargin = intrinsicPrice > 0 ? 1 - a.current_price / intrinsicPrice : 0;
+      return {{ rows, pvFcff, pvTerminal, terminalValue, enterpriseValue, equityValue, intrinsicPrice, upside, safetyMargin }};
     }}
 
     function initChart(id, option) {{
@@ -582,6 +587,7 @@ def build_html(data: Dict[str, object], assumptions: Dict[str, object], dcf: Dic
       document.getElementById('valuationPrice').textContent = price(dcf.intrinsicPrice);
       document.getElementById('valuationUpside').textContent = percent(dcf.upside);
       document.getElementById('valuationEv').textContent = money(dcf.enterpriseValue);
+      document.getElementById('valuationMos').textContent = percent(dcf.safetyMargin);
       document.getElementById('headerPrice').textContent = price(dcf.intrinsicPrice);
       document.getElementById('headerUpside').textContent = percent(dcf.upside);
       const badge = document.getElementById('headerBadge');
@@ -651,7 +657,7 @@ def build_html(data: Dict[str, object], assumptions: Dict[str, object], dcf: Dic
 def main() -> None:
     args = parse_args()
     data_dir = configure_paths(args.data_dir_flag or args.data_dir)
-    from pipeline_utils import ASSETS_DIR, VALUATION_DIR
+    from afda.pipeline_utils import ASSETS_DIR, VALUATION_DIR
 
     data = load_dataset(data_dir)
     workbook_path = VALUATION_DIR / "DCF_valuation_model.xlsx"

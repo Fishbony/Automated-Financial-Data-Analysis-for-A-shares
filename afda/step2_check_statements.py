@@ -34,8 +34,8 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from openpyxl import load_workbook
-from excel_utils import apply_bilingual_fonts
-from pipeline_utils import CHECKS_DIR, CSV_DIR, RESULTS_DIR, ensure_output_dirs
+from afda.excel_utils import apply_bilingual_fonts
+from afda.pipeline_utils import CHECKS_DIR, CSV_DIR, RESULTS_DIR, ensure_output_dirs
 
 # ── 文件路径配置 ────────────────────────────────────────────────────────────
 ensure_output_dirs()
@@ -75,6 +75,7 @@ def load_statement(path: str) -> pd.DataFrame:
     first_col = df.columns[0]
     df = df.rename(columns={first_col: "科目"})
     df["科目"] = df["科目"].astype(str).str.strip()
+    df = df[~df["科目"].isin(["", "nan", "None"])].copy()
     df.columns = ["科目"] + [str(c).strip() for c in df.columns[1:]]
     for c in df.columns[1:]:
         df[c] = pd.to_numeric(df[c], errors="coerce")

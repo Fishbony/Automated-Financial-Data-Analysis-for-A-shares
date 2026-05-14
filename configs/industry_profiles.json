@@ -1,0 +1,32 @@
+{
+  "general_industrial": {
+    "name": "一般工商企业",
+    "primary_methods": ["DCF", "PE", "EV/EBITDA"],
+    "notes": "适合制造、消费、科技硬件、一般服务业等非金融公司。重点复核收入增速、EBIT率、营运资本和资本开支。"
+  },
+  "growth": {
+    "name": "成长股",
+    "primary_methods": ["DCF", "PS", "EV/Revenue"],
+    "notes": "适合利润尚未完全释放但收入高增长的公司。需要更重视收入可持续性、远期利润率和稀释风险。"
+  },
+  "cyclical": {
+    "name": "周期股",
+    "primary_methods": ["PB", "EV/EBITDA", "mid-cycle PE"],
+    "notes": "适合资源品、材料、航运等周期性行业。应使用中周期利润和中周期倍数，不宜简单外推最近一年高景气利润。"
+  },
+  "financial": {
+    "name": "金融股",
+    "primary_methods": ["PB", "DDM", "ROE-COE"],
+    "notes": "银行、保险、券商不适合普通 FCFF DCF。应单独使用金融行业资产负债表、资本充足率和分红模型。"
+  },
+  "utility": {
+    "name": "公用事业",
+    "primary_methods": ["DCF", "DDM", "EV/EBITDA"],
+    "notes": "适合现金流稳定、监管定价明确的资产。重点复核利用小时、补贴回款、资本开支和负债成本。"
+  },
+  "sotp": {
+    "name": "多业务集团",
+    "primary_methods": ["SOTP", "PE", "EV/EBITDA"],
+    "notes": "适合多板块业务差异很大的集团。应拆分业务线收入、利润和资本投入后分别估值。"
+  }
+}

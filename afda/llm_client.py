@@ -24,7 +24,7 @@ def load_project_env(env_path: Optional[Path] = None) -> None:
 
     Existing environment variables win so shell-provided overrides still work.
     """
-    target = env_path or Path(__file__).resolve().with_name(".env")
+    target = env_path or Path(__file__).resolve().parents[1] / ".env"
     if not target.exists():
         return
 

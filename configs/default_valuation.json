@@ -1,0 +1,22 @@
+{
+  "industry_profile": "general_industrial",
+  "dcf": {
+    "wacc": 0.10,
+    "terminal_growth": 0.03,
+    "dcf_weight": 0.60,
+    "relative_weight": 0.40
+  },
+  "relative_valuation": {
+    "multiples": {
+      "PE": {"low": 18.0, "mid": 22.0, "high": 26.0},
+      "PB": {"low": 3.0, "mid": 3.8, "high": 4.5},
+      "PS": {"low": 2.0, "mid": 2.5, "high": 3.0},
+      "EV/EBIT": {"low": 16.0, "mid": 20.0, "high": 24.0},
+      "EV/EBITDA": {"low": 13.0, "mid": 16.0, "high": 19.0}
+    }
+  },
+  "sensitivity": {
+    "wacc": [0.08, 0.09, 0.10, 0.11, 0.12],
+    "terminal_growth": [0.01, 0.02, 0.03, 0.04, 0.05]
+  }
+}

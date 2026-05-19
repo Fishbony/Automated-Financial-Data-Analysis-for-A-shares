@@ -30,6 +30,8 @@ Step 2/8 — 三表一致性检验
     python run_pipeline.py
 """
 
+from __future__ import annotations
+
 import pandas as pd
 import numpy as np
 from pathlib import Path

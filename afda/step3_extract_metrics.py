@@ -36,6 +36,8 @@ Step 3/8 — 核心财务指标提取与计算（基础版）
     python run_pipeline.py
 """
 
+from __future__ import annotations
+
 import json
 
 import pandas as pd

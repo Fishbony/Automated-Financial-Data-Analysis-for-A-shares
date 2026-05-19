@@ -4,18 +4,19 @@ Step 8/8 — DCF 估值模型生成
 读取三表标准化输出和公司基础信息，自动计算历史财务驱动因子，
 生成包含多个联动 Sheet 的 Excel DCF 估值工作簿。
 
-工作簿结构（共 10 个 Sheet）
+工作簿结构
 ------------------------------
 Summary          — 估值总览：DCF vs 相对估值、加权目标价、上行/下行空间
-Historical       — 历史财务整理（Revenue、EBIT、CapEx、CFO 等）
+DCF_Input_Map    — 从三张标准化宽表提取的 DCF 建模输入底稿
+DCF_Readiness    — 历史现金流、营运资本、CapEx 等 DCF 适用性判断
+WACC_Build       — 无风险利率、Beta、ERP、债务成本与三情景 WACC 推导
 Assumptions      — 可编辑假设区（WACC、永续增长率、5年逐年收入增速等）
 Forecast         — 5 年经营预测与 FCFF 计算（公式联动 Assumptions）
 DCF              — DCF 估值主表（EV → 股东权益价值 → 每股内在价值）
+Model_Checks     — 终值、永续增长率、WACC、利润率、CapEx、营运资本检查点
+Scenario_DCF     — 悲观 / 中性 / 乐观三套完整 DCF 情景
 Sensitivity      — WACC / 永续增长率 敏感性矩阵（含条件格式）
 Comparable       — 相对估值（PE / PB / EV/EBIT / EV/EBITDA）
-Investment_Thesis — 投资评级与核心观点（自动联动估值结果）
-Charts           — Revenue / EBIT / FCFF 趋势图 + 目标价区间图
-Raw_Data         — 模型关键原始口径备查
 
 自动计算的驱动因子
 ------------------
@@ -28,6 +29,7 @@ Raw_Data         — 模型关键原始口径备查
 - results/BS_rebuilt_output/2_standardized_bs.csv
 - results/PL_rebuilt_output/2_standardized_pl.csv
 - results/CF_rebuilt_output/2_standardized_cf.csv
+- results/04_rebuilt_statements/*/2_standardized_*_wide.csv
 - Info.csv     （需含：总股本、当前股价、公司简称）
 
 输出
@@ -73,9 +75,57 @@ BASE_DIR = Path(".")
 BS_PATH = BS_REBUILT_DIR / "2_standardized_bs.csv"
 PL_PATH = PL_REBUILT_DIR / "2_standardized_pl.csv"
 CF_PATH = CF_REBUILT_DIR / "2_standardized_cf.csv"
+BS_WIDE_PATH = BS_REBUILT_DIR / "2_standardized_bs_wide.csv"
+PL_WIDE_PATH = PL_REBUILT_DIR / "2_standardized_pl_wide.csv"
+CF_WIDE_PATH = CF_REBUILT_DIR / "2_standardized_cf_wide.csv"
 INFO_PATH = BASE_DIR / "demo" / "rawdata" / "Info.csv"
 OUTPUT_DIR = VALUATION_DIR
 OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
+
+
+DCF_INPUT_ITEMS = {
+    "PL": [
+        ("Revenue", "营业收入"),
+        ("Operating Profit", "营业利润"),
+        ("Financial Expense", "财务费用"),
+        ("Profit Before Tax", "利润总额"),
+        ("Income Tax", "所得税费用"),
+        ("Parent Net Profit", "归母净利润"),
+    ],
+    "BS": [
+        ("Cash & Short-term Financial Assets", "现金及短期金融资产"),
+        ("Interest-bearing Short-term Debt", "短期有息债务"),
+        ("Long-term Interest-bearing Debt", "长期有息债务"),
+        ("Core Operating Current Assets", "核心经营性流动资产"),
+        ("Operating Non-interest-bearing Current Liabilities", "经营性无息流动负债"),
+        ("Minority Interest", "少数股东权益"),
+        ("Total Equity", "股东权益"),
+        ("Long-term Financial & Equity Investments", "长期金融/股权投资"),
+        ("Non-operating Misc. Current Assets", "非经营性流动资产"),
+    ],
+    "CF": [
+        ("Operating Cash Flow", "经营活动现金流"),
+        ("Depreciation", "折旧"),
+        ("Amortization", "摊销"),
+        ("Capex", "资本开支"),
+    ],
+}
+
+
+def configure_results_paths(results_dir: Path) -> None:
+    global BS_PATH, PL_PATH, CF_PATH
+    global BS_WIDE_PATH, PL_WIDE_PATH, CF_WIDE_PATH
+    global OUTPUT_DIR, OUTPUT_PATH
+
+    rebuilt_dir = results_dir / "04_rebuilt_statements"
+    BS_PATH = rebuilt_dir / "balance_sheet" / "2_standardized_bs.csv"
+    PL_PATH = rebuilt_dir / "income_statement" / "2_standardized_pl.csv"
+    CF_PATH = rebuilt_dir / "cash_flow" / "2_standardized_cf.csv"
+    BS_WIDE_PATH = rebuilt_dir / "balance_sheet" / "2_standardized_bs_wide.csv"
+    PL_WIDE_PATH = rebuilt_dir / "income_statement" / "2_standardized_pl_wide.csv"
+    CF_WIDE_PATH = rebuilt_dir / "cash_flow" / "2_standardized_cf_wide.csv"
+    OUTPUT_DIR = results_dir / "05_valuation"
+    OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
 
 
 def load_item_series(df: pd.DataFrame, item_col: str, year_col: str, value_col: str) -> Dict[str, Dict[int, float]]:
@@ -91,6 +141,51 @@ def load_item_series(df: pd.DataFrame, item_col: str, year_col: str, value_col: 
 def get_series(item_map: Dict[str, Dict[int, float]], item: str, years: List[int]) -> List[float]:
     series = item_map.get(item, {})
     return [float(series.get(year, 0.0)) for year in years]
+
+
+def load_wide_items(path: Path, item_col_candidates: List[str]) -> Dict[str, Dict[int, float]]:
+    if not path.exists():
+        return {}
+    wide = pd.read_csv(path)
+    item_col = next((col for col in item_col_candidates if col in wide.columns), wide.columns[0])
+    year_cols = [col for col in wide.columns if str(col).isdigit()]
+    out: Dict[str, Dict[int, float]] = {}
+    for _, row in wide.iterrows():
+        item = str(row[item_col]).strip()
+        out[item] = {}
+        for col in year_cols:
+            value = pd.to_numeric(row[col], errors="coerce")
+            out[item][int(col)] = 0.0 if pd.isna(value) else float(value)
+    return out
+
+
+def safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> float:
+    return numerator / denominator if abs(denominator) > 1e-9 else fallback
+
+
+def count_positive(values: List[float]) -> int:
+    return sum(1 for value in values if value > 0)
+
+
+def trend_slope(values: List[float]) -> float:
+    clean = [float(v) for v in values if pd.notna(v)]
+    if len(clean) < 2:
+        return 0.0
+    x_mean = (len(clean) - 1) / 2
+    y_mean = avg(clean)
+    denominator = sum((i - x_mean) ** 2 for i in range(len(clean)))
+    if denominator == 0:
+        return 0.0
+    return sum((i - x_mean) * (value - y_mean) for i, value in enumerate(clean)) / denominator
+
+
+def coefficient_of_variation(values: List[float]) -> float:
+    clean = [abs(float(v)) for v in values if pd.notna(v)]
+    mean_value = avg(clean)
+    if mean_value <= 1e-9 or len(clean) < 2:
+        return 0.0
+    variance = sum((value - mean_value) ** 2 for value in clean) / len(clean)
+    return math.sqrt(variance) / mean_value
 
 
 def cagr(start_value: float, end_value: float, periods: int) -> float:
@@ -126,6 +221,122 @@ def detect_company_name(ticker: str, info_path: Optional[Path] = None) -> str:
         except Exception:
             pass
     return ticker
+
+
+def build_dcf_input_rows(years: List[int]) -> List[Dict[str, object]]:
+    wide_maps = {
+        "PL": load_wide_items(PL_WIDE_PATH, ["Standard Item"]),
+        "BS": load_wide_items(BS_WIDE_PATH, ["StandardLineItem", "Standard Item"]),
+        "CF": load_wide_items(CF_WIDE_PATH, ["Standard Item"]),
+    }
+    rows: List[Dict[str, object]] = []
+    for statement, items in DCF_INPUT_ITEMS.items():
+        for item, cn_name in items:
+            year_values = wide_maps.get(statement, {}).get(item, {})
+            row = {
+                "Statement": statement,
+                "Standard Item": item,
+                "中文说明": cn_name,
+                "DCF用途": dcf_item_usage(item),
+            }
+            for year in years:
+                row[year] = float(year_values.get(year, 0.0))
+            rows.append(row)
+    return rows
+
+
+def dcf_item_usage(item: str) -> str:
+    usage = {
+        "Revenue": "预测收入与各项比率分母",
+        "Operating Profit": "计算 EBIT",
+        "Financial Expense": "营业利润还原 EBIT",
+        "Profit Before Tax": "估算有效税率",
+        "Income Tax": "估算有效税率",
+        "Parent Net Profit": "校验 CFO 与利润匹配度",
+        "Cash & Short-term Financial Assets": "净债务与权益桥",
+        "Interest-bearing Short-term Debt": "净债务与 WACC 资本结构",
+        "Long-term Interest-bearing Debt": "净债务与 WACC 资本结构",
+        "Core Operating Current Assets": "营运资本占用",
+        "Operating Non-interest-bearing Current Liabilities": "营运资本占用",
+        "Minority Interest": "权益价值调整",
+        "Total Equity": "账面权益与资本结构交叉检查",
+        "Long-term Financial & Equity Investments": "非经营资产加回",
+        "Non-operating Misc. Current Assets": "非经营资产加回",
+        "Operating Cash Flow": "FCF 质量与 DCF 适用性",
+        "Depreciation": "FCFF 加回项",
+        "Amortization": "FCFF 加回项",
+        "Capex": "FCFF 扣减项",
+    }
+    return usage.get(item, "DCF建模输入")
+
+
+def build_readiness_checks(data: Dict[str, object]) -> List[Dict[str, object]]:
+    years = data["years"]
+    cfo = data["cfo"]
+    fcff = data["fcff_proxy"]
+    net_profit = data["parent_net_profit"]
+    revenue = data["revenue"]
+    nwc = data["nwc"]
+    capex = data["capex"]
+
+    cfo_positive_ratio = safe_div(count_positive(cfo), len(cfo))
+    fcff_slope = trend_slope(fcff)
+    cfo_np_ratios = [safe_div(c, p, 0.0) for c, p in zip(cfo, net_profit) if abs(p) > 1e-9]
+    cfo_np_match = avg([min(max(ratio, 0.0), 2.0) for ratio in cfo_np_ratios], 0.0)
+    nwc_revenue = [safe_div(n, r, 0.0) for n, r in zip(nwc, revenue)]
+    nwc_slope = trend_slope(nwc_revenue)
+    capex_revenue = [safe_div(x, r, 0.0) for x, r in zip(capex, revenue)]
+    capex_cv = coefficient_of_variation(capex_revenue)
+
+    def status(condition_good: bool, condition_watch: bool) -> str:
+        if condition_good:
+            return "通过"
+        if condition_watch:
+            return "关注"
+        return "不通过"
+
+    return [
+        {
+            "检查项": "多数年份 CFO 为正",
+            "指标": "CFO为正年份占比",
+            "结果": cfo_positive_ratio,
+            "判断": status(cfo_positive_ratio >= 0.70, cfo_positive_ratio >= 0.50),
+            "推断过程": f"{count_positive(cfo)}/{len(cfo)} 个历史年份经营现金流为正。",
+            "模型含义": "DCF 更依赖可持续现金流，CFO长期为负会削弱 FCFF 外推可信度。",
+        },
+        {
+            "检查项": "自由现金流趋势",
+            "指标": "FCFF Proxy线性斜率",
+            "结果": fcff_slope,
+            "判断": status(fcff_slope > 0 and fcff[-1] > 0, fcff_slope > 0 or fcff[-1] > 0),
+            "推断过程": f"FCFF Proxy = CFO - CapEx；{years[0]}A至{years[-1]}A斜率为 {fcff_slope:,.2f}，末年为 {fcff[-1]:,.2f}。",
+            "模型含义": "正向或改善的 FCF 更适合以稳定增长模型估值。",
+        },
+        {
+            "检查项": "CFO 与净利润匹配度",
+            "指标": "平均 CFO / 归母净利润",
+            "结果": cfo_np_match,
+            "判断": status(0.70 <= cfo_np_match <= 1.50, 0.40 <= cfo_np_match <= 2.00),
+            "推断过程": "逐年计算 CFO / 归母净利润，剔除净利润接近 0 的年份后取均值并限制极端值影响。",
+            "模型含义": "匹配度较高通常意味着盈利质量对现金流预测更友好。",
+        },
+        {
+            "检查项": "营运资本是否持续恶化",
+            "指标": "NWC / Revenue趋势斜率",
+            "结果": nwc_slope,
+            "判断": status(nwc_slope <= 0.005, nwc_slope <= 0.020),
+            "推断过程": "以核心经营流动资产减经营性无息流动负债，再除以收入，观察比例趋势。",
+            "模型含义": "NWC占收入持续上升会吞噬 FCFF，预测期需要提高营运资本占用假设。",
+        },
+        {
+            "检查项": "资本开支规律性",
+            "指标": "CapEx / Revenue变异系数",
+            "结果": capex_cv,
+            "判断": status(capex_cv <= 0.50, capex_cv <= 1.00),
+            "推断过程": "逐年计算 CapEx / Revenue，用变异系数衡量波动性。",
+            "模型含义": "CapEx波动越高，单一均值外推越需要人工复核。",
+        },
+    ]
 
 
 def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optional[Path] = None) -> Dict[str, object]:
@@ -210,7 +421,7 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         round(max(growth_seed - 0.055, 0.025), 4),
     ]
 
-    return {
+    data = {
         "years": years,
         "forecast_years": forecast_years,
         "base_year": base_year,
@@ -252,6 +463,9 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         "base_nwc_ratio": round(base_nwc_ratio, 4),
         "valuation_config": valuation_config,
     }
+    data["dcf_input_rows"] = build_dcf_input_rows(years)
+    data["readiness_checks"] = build_readiness_checks(data)
+    return data
 
 
 def apply_title_style(cell) -> None:
@@ -269,12 +483,37 @@ def apply_header_style(cell) -> None:
 
 
 def apply_input_style(cell) -> None:
-    cell.fill = PatternFill("solid", fgColor="FFF2CC")
-    cell.font = Font(color="7F6000")
+    thin = Side(style="thin", color="C9A227")
+    cell.fill = PatternFill("solid", fgColor="FFE699")
+    cell.font = Font(color="7F6000", bold=True)
+    cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    cell.alignment = Alignment(horizontal="center", vertical="center")
 
 
 def apply_formula_style(cell) -> None:
+    thin = Side(style="thin", color="A9D18E")
     cell.fill = PatternFill("solid", fgColor="E2F0D9")
+    cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+
+def apply_output_style(cell) -> None:
+    thin = Side(style="thin", color="9EADCC")
+    cell.fill = PatternFill("solid", fgColor="DDEBF7")
+    cell.font = Font(bold=True, color="1F4E78")
+    cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+
+def add_legend(ws, start_cell: str) -> None:
+    row = int("".join(ch for ch in start_cell if ch.isdigit()))
+    col = ord("".join(ch for ch in start_cell if ch.isalpha()).upper()) - ord("A") + 1
+    ws.cell(row=row, column=col, value="颜色说明")
+    apply_header_style(ws.cell(row=row, column=col))
+    ws.cell(row=row + 1, column=col, value="可编辑输入")
+    apply_input_style(ws.cell(row=row + 1, column=col))
+    ws.cell(row=row + 2, column=col, value="公式/联动")
+    apply_formula_style(ws.cell(row=row + 2, column=col))
+    ws.cell(row=row + 3, column=col, value="关键输出")
+    apply_output_style(ws.cell(row=row + 3, column=col))
 
 
 def set_col_widths(ws, widths: Dict[str, float]) -> None:
@@ -320,7 +559,10 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ws[f"A{idx}"] = label
         ws[f"B{idx}"] = formula
         if isinstance(formula, str) and formula.startswith("="):
-            apply_formula_style(ws[f"B{idx}"])
+            if idx in {9, 10, 11, 12, 13}:
+                apply_output_style(ws[f"B{idx}"])
+            else:
+                apply_formula_style(ws[f"B{idx}"])
 
     ws["D3"] = "目标价汇总"
     ws["E3"] = "低"
@@ -372,10 +614,12 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     apply_header_style(ws["D12"])
     ws["D13"] = "黄色区域为可编辑假设"
     ws["D14"] = "绿色区域为公式联动结果"
-    ws["D15"] = "修改 Assumptions 或 Comparable 后本页自动刷新"
-    ws["D16"] = "建议优先调整：收入增速、EBIT率、WACC、永续增长率、可比倍数"
+    ws["D15"] = "蓝色区域为核心输出"
+    ws["D16"] = "修改 Assumptions、WACC_Build 或 Comparable 后本页自动刷新"
+    ws["D17"] = "建议优先调整：收入增速、EBIT率、WACC、永续增长率、可比倍数"
+    add_legend(ws, "J3")
     ws.freeze_panes = "A3"
-    set_col_widths(ws, {"A": 20, "B": 16, "D": 20, "E": 12, "F": 12, "G": 12, "H": 10, "I": 14})
+    set_col_widths(ws, {"A": 20, "B": 16, "D": 20, "E": 12, "F": 12, "G": 12, "H": 10, "I": 14, "J": 14})
     ws["B4"].number_format = "0.00"       # 基准年度（文本，格式不影响显示）
     ws["B5"].number_format = "0.00"       # 当前股价（元/股，保留两位小数）
     ws["B6"].number_format = "#,##0"      # 总股本（股数，整数带千分位）
@@ -390,6 +634,139 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ws[ref].number_format = "0.00"
     for ref in ["H4", "H5", "H7", "E9", "F9", "G9"]:
         ws[ref].number_format = "0.0%"
+
+
+def create_dcf_input_map_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("DCF_Input_Map")
+    ws["A1"] = "DCF建模输入底稿"
+    apply_title_style(ws["A1"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4 + len(data["years"]))
+
+    headers = ["报表", "Standard Item", "中文说明", "DCF用途"] + data["years"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    fills = {
+        "PL": PatternFill("solid", fgColor="D9EAF7"),
+        "BS": PatternFill("solid", fgColor="E2F0D9"),
+        "CF": PatternFill("solid", fgColor="FFF2CC"),
+    }
+    for row_idx, row_data in enumerate(data["dcf_input_rows"], start=4):
+        statement = str(row_data["Statement"])
+        ws.cell(row=row_idx, column=1, value=statement)
+        ws.cell(row=row_idx, column=2, value=row_data["Standard Item"])
+        ws.cell(row=row_idx, column=3, value=row_data["中文说明"])
+        ws.cell(row=row_idx, column=4, value=row_data["DCF用途"])
+        ws.cell(row=row_idx, column=1).fill = fills.get(statement, PatternFill("solid", fgColor="FFFFFF"))
+        ws.cell(row=row_idx, column=1).font = Font(bold=True)
+        for col_idx, year in enumerate(data["years"], start=5):
+            cell = ws.cell(row=row_idx, column=col_idx, value=float(row_data.get(year, 0.0)))
+            cell.number_format = '#,##0.00'
+
+    add_note(ws, "A28", "本页直接来自重构后的 2_standardized_pl_wide.csv、2_standardized_bs_wide.csv、2_standardized_cf_wide.csv；报表索引用不同颜色标识。")
+    ws.freeze_panes = "E4"
+    set_col_widths(ws, {"A": 10, "B": 42, "C": 24, "D": 34})
+    for col_idx in range(5, 5 + len(data["years"])):
+        ws.column_dimensions[get_column_letter(col_idx)].width = 14
+
+
+def create_readiness_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("DCF_Readiness")
+    ws["A1"] = "DCF适用性判断"
+    apply_title_style(ws["A1"])
+    ws.merge_cells("A1:F1")
+
+    headers = ["检查项", "指标", "结果", "判断", "推断过程", "模型含义"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    status_fills = {
+        "通过": PatternFill("solid", fgColor="E2F0D9"),
+        "关注": PatternFill("solid", fgColor="FFF2CC"),
+        "不通过": PatternFill("solid", fgColor="FCE4D6"),
+    }
+    for row_idx, row_data in enumerate(data["readiness_checks"], start=4):
+        for col_idx, key in enumerate(headers, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=row_data[key])
+            if key == "结果":
+                cell.number_format = "0.00"
+            if key == "判断":
+                cell.fill = status_fills.get(str(row_data[key]), PatternFill("solid", fgColor="FFFFFF"))
+                cell.font = Font(bold=True)
+            if key in {"推断过程", "模型含义"}:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    ws["A11"] = "综合结论"
+    apply_header_style(ws["A11"])
+    ws["B11"] = '=IF(COUNTIF(D4:D8,"不通过")>0,"DCF需谨慎使用：存在关键现金流或投入假设风险",IF(COUNTIF(D4:D8,"关注")>=2,"DCF可作为参考，但预测假设需保守复核","历史指标基本支持使用DCF框架"))'
+    apply_formula_style(ws["B11"])
+    ws.merge_cells("B11:F11")
+    add_note(ws, "A13", "判断阈值用于模型初筛，不替代行业研究、公司公告和人工调整。")
+    ws.freeze_panes = "A4"
+    set_col_widths(ws, {"A": 24, "B": 24, "C": 16, "D": 12, "E": 58, "F": 52})
+
+
+def create_wacc_build_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("WACC_Build")
+    ws["A1"] = "WACC三情景推导"
+    apply_title_style(ws["A1"])
+    ws.merge_cells("A1:E1")
+
+    headers = ["项目", "悲观", "中性", "乐观", "计算/说明"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    add_legend(ws, "G3")
+
+    scenario_inputs = [
+        ("无风险利率 Rf", 0.030, 0.025, 0.020, "可用10年期国债收益率或相近期限无风险利率"),
+        ("Beta", 1.20, 1.00, 0.85, "可取可比公司回归Beta，并按目标资本结构调整"),
+        ("股权风险溢价 ERP", 0.065, 0.055, 0.045, "A股市场长期权益风险溢价假设"),
+        ("规模/流动性溢价", 0.015, 0.010, 0.005, "小市值、流动性和治理折价补偿"),
+        ("公司特定风险溢价", 0.020, 0.010, 0.000, "订单、客户集中、周期或经营不确定性补偿"),
+    ]
+    for row_idx, values in enumerate(scenario_inputs, start=4):
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            if 2 <= col_idx <= 4:
+                apply_input_style(cell)
+                cell.number_format = "0.0%" if row_idx != 5 else "0.00"
+
+    formula_rows = [
+        (9, "股权成本 Re", "=B4+B5*B6+B7+B8", "=C4+C5*C6+C7+C8", "=D4+D5*D6+D7+D8", "Re = Rf + Beta * ERP + 规模溢价 + 公司风险溢价"),
+        (11, "税前债务成本 Rd", 0.055, 0.045, 0.035, "可参考公司债务利率、贷款利率或同评级信用利差"),
+        (12, "有效税率", data["base_tax_rate"], data["base_tax_rate"], data["base_tax_rate"], "使用历史三年有效税率均值并限制在合理区间"),
+        (13, "税后债务成本", "=B11*(1-B12)", "=C11*(1-C12)", "=D11*(1-D12)", "After-tax Rd = Rd * (1 - Tax Rate)"),
+        (15, "权益权重", 0.80, 0.85, 0.90, "目标资本结构，可结合市值与有息债务调整"),
+        (16, "债务权重", "=1-B15", "=1-C15", "=1-D15", "Debt Weight = 1 - Equity Weight"),
+        (18, "WACC", "=B15*B9+B16*B13", "=C15*C9+C16*C13", "=D15*D9+D16*D13", "WACC = E/(D+E)*Re + D/(D+E)*Rd*(1-T)"),
+    ]
+    for row, label, pess, neutral, optimistic, note in formula_rows:
+        ws[f"A{row}"] = label
+        ws[f"B{row}"] = pess
+        ws[f"C{row}"] = neutral
+        ws[f"D{row}"] = optimistic
+        ws[f"E{row}"] = note
+        for col in ["B", "C", "D"]:
+            if isinstance(ws[f"{col}{row}"].value, str):
+                apply_formula_style(ws[f"{col}{row}"])
+            else:
+                apply_input_style(ws[f"{col}{row}"])
+            ws[f"{col}{row}"].number_format = "0.0%"
+
+    ws["A21"] = "主模型采用"
+    apply_header_style(ws["A21"])
+    ws["B21"] = "中性 WACC"
+    ws["C21"] = "=C18"
+    ws["D21"] = "Assumptions!B6 将引用本单元格"
+    apply_output_style(ws["C21"])
+    ws["C21"].number_format = "0.0%"
+    add_note(ws, "A23", "黄色格为三情景输入；绿色格为公式；蓝色格为主模型采用值。若有实时国债收益率、可比公司Beta或债务利率，应优先替换黄色输入。")
+    ws.freeze_panes = "B4"
+    set_col_widths(ws, {"A": 22, "B": 12, "C": 12, "D": 12, "E": 68, "G": 14})
 
 
 def create_historical_sheet(wb: Workbook, data: Dict[str, object]) -> None:
@@ -454,7 +831,7 @@ def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ("B3", data["shares_outstanding"], "总股本"),
         ("B4", data["current_price"], "当前股价"),
         ("B5", data["cash"][-1] - data["short_debt"][-1] - data["long_debt"][-1], "净现金/(净债务)"),
-        ("B6", float(dcf_config["wacc"]), "WACC"),
+        ("B6", "=WACC_Build!C21", "WACC"),
         ("B7", float(dcf_config["terminal_growth"]), "永续增长率"),
         ("B8", data["minority_interest"][-1], "少数股东权益"),
         ("B9", data["long_term_investments"][-1], "长期金融投资加回"),
@@ -466,15 +843,19 @@ def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     apply_header_style(ws["B3"])
     ws["C3"] = "说明"
     apply_header_style(ws["C3"])
+    add_legend(ws, "E3")
     for cell_ref, value, desc in labels:
         ws[f"A{cell_ref[1:]}"] = desc
-        ws[cell_ref] = float(value)
-        ws[f"C{cell_ref[1:]}"] = "可编辑"
-        apply_input_style(ws[cell_ref])
+        ws[cell_ref] = value if isinstance(value, str) else float(value)
+        ws[f"C{cell_ref[1:]}"] = "来自WACC_Build中性情景" if cell_ref == "B6" else "可编辑"
+        if cell_ref == "B6":
+            apply_formula_style(ws[cell_ref])
+        else:
+            apply_input_style(ws[cell_ref])
 
     forecast_years = data["forecast_years"]
     start_row = 13
-    ws[f"A{start_row}"] = "逐年预测假设"
+    ws[f"A{start_row}"] = "逐年预测假设（黄色区域可编辑）"
     apply_header_style(ws[f"A{start_row}"])
     for idx, year in enumerate(forecast_years, start=2):
         cell = ws.cell(row=start_row, column=idx, value=year)
@@ -495,9 +876,9 @@ def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
             apply_input_style(cell)
             cell.number_format = "0.0%"
 
-    add_note(ws, "A22", "黄色单元格可直接修改，Forecast / DCF / Summary 会自动联动。")
+    add_note(ws, "A22", "本页集中管理主模型输入。黄色单元格可直接修改；WACC 来自 WACC_Build 中性情景；Forecast / DCF / Summary 会自动联动。")
     ws.freeze_panes = "B14"
-    set_col_widths(ws, {"A": 22, "B": 14, "C": 14, "D": 14, "E": 14, "F": 14, "G": 14})
+    set_col_widths(ws, {"A": 28, "B": 14, "C": 24, "D": 14, "E": 14, "F": 14, "G": 14})
     for cell_ref in ["B3", "B5", "B8", "B9", "B10"]:
         ws[cell_ref].number_format = '#,##0.00'
     ws["B4"].number_format = "0.00"
@@ -631,7 +1012,7 @@ def create_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         ("B12", "Forecast!H18/(1+B5)^4", "Year 4 FCFF 现值"),
         ("B13", "Forecast!I18/(1+B5)^5", "Year 5 FCFF 现值"),
         ("B14", "SUM(B9:B13)+B8/(1+B5)^5", "企业价值 EV"),
-        ("B16", "-Assumptions!B5", "减：净债务（净现金为负值时会加回）"),
+        ("B16", "Assumptions!B5", "加：净现金（若为负则等同减净债务）"),
         ("B17", "-Assumptions!B8", "减：少数股东权益"),
         ("B18", "Assumptions!B9", "加：长期金融投资"),
         ("B19", "Assumptions!B10", "加：非经营流动资产"),
@@ -644,13 +1025,17 @@ def create_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         row = int(cell_ref[1:])
         ws[f"A{row}"] = label
         ws[cell_ref] = f"={formula_body}"
-        apply_formula_style(ws[cell_ref])
+        if row in {14, 20, 21, 22, 23}:
+            apply_output_style(ws[cell_ref])
+        else:
+            apply_formula_style(ws[cell_ref])
 
     ws["E3"] = "关键桥接"
     apply_header_style(ws["E3"])
-    ws["E4"] = "净债务口径 = 有息短债 + 有息长债 - 现金及短期金融资产"
-    ws["E5"] = "权益价值 = EV - 净债务 - 少数股东权益 + 非经营资产"
+    ws["E4"] = "净现金口径 = 现金及短期金融资产 - 有息短债 - 有息长债"
+    ws["E5"] = "权益价值 = EV + 净现金 - 少数股东权益 + 非经营资产"
     ws["E6"] = "FCFF = NOPAT + D&A - Capex - ΔNWC"
+    add_legend(ws, "E9")
     ws["B5"].number_format = "0.0%"
     ws["B6"].number_format = "0.0%"
     for ref in ["B7", "B8", "B9", "B10", "B11", "B12", "B13", "B14", "B16", "B17", "B18", "B19", "B20"]:
@@ -660,6 +1045,317 @@ def create_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["B23"].number_format = "0.0%"
     ws.freeze_panes = "A4"
     set_col_widths(ws, {"A": 28, "B": 16, "C": 18, "E": 52})
+
+
+def create_model_checks_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("Model_Checks")
+    ws["A1"] = "DCF模型检查点"
+    apply_title_style(ws["A1"])
+    ws.merge_cells("A1:F1")
+
+    headers = ["检查点", "检查公式/指标", "当前值", "判断", "阈值", "复核动作"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    hist_ebit_margins = [x for x in data["ebit_margin"] if pd.notna(x)]
+    hist_capex_ratios = [x for x in data["capex_ratio"] if pd.notna(x)]
+    hist_nwc_ratios = [x for x in data["nwc_ratio"] if pd.notna(x)]
+    max_hist_margin = max(hist_ebit_margins) if hist_ebit_margins else 0.0
+    avg_hist_capex = avg(hist_capex_ratios, 0.0)
+    avg_hist_nwc = avg(hist_nwc_ratios, 0.0)
+
+    checks = [
+        (
+            "终值占比是否过高",
+            "PV(TV) / EV",
+            "=DCF!B8/(1+DCF!B5)^5/DCF!B14",
+            '=IF(C4>0.75,"不通过",IF(C4>0.65,"关注","通过"))',
+            "关注 >65%；不通过 >75%",
+            "下调永续增长率、提高WACC，或延长显性预测并复核远期FCFF。",
+        ),
+        (
+            "永续增长率是否合理",
+            "Terminal g",
+            "=Assumptions!B7",
+            '=IF(C5>=DCF!B5,"不通过",IF(C5>0.04,"关注","通过"))',
+            "应低于WACC，通常不宜高于长期名义GDP/行业成熟增速",
+            "用更保守的长期通胀+销量/价格增长假设替换。",
+        ),
+        (
+            "WACC 是否太低",
+            "WACC - g",
+            "=Assumptions!B6-Assumptions!B7",
+            '=IF(C6<0.02,"不通过",IF(C6<0.035,"关注","通过"))',
+            "WACC 与 g 的差额至少留出风险缓冲",
+            "复核无风险利率、Beta、ERP、债务成本和资本结构。",
+        ),
+        (
+            "利润率是否过于乐观",
+            "预测期最高EBIT率 - 历史最高EBIT率",
+            f"=MAX(Forecast!E6:I6)-{max_hist_margin}",
+            '=IF(C7>0.05,"不通过",IF(C7>0.02,"关注","通过"))',
+            "预测利润率显著高于历史峰值时需解释经营杠杆来源",
+            "复核毛利率、费用率、竞争格局和产能利用率。",
+        ),
+        (
+            "CapEx 是否低估",
+            "预测期平均CapEx率 / 历史平均CapEx率",
+            f"=IF({avg_hist_capex}=0,0,AVERAGE(Forecast!E13:I13)/{avg_hist_capex})",
+            '=IF(C8<0.60,"不通过",IF(C8<0.80,"关注","通过"))',
+            "预测CapEx率明显低于历史均值时需证明轻资产化或产能周期结束",
+            "检查扩产计划、折旧摊销、维护性CapEx和产能约束。",
+        ),
+        (
+            "营运资本是否低估",
+            "预测期平均NWC率 / 历史平均NWC率",
+            f"=IF({avg_hist_nwc}=0,0,AVERAGE(Forecast!E15:I15)/{avg_hist_nwc})",
+            '=IF(AND({avg_hist_nwc}>0,C9<0.60),"不通过",IF(AND({avg_hist_nwc}>0,C9<0.80),"关注","通过"))',
+            "预测NWC占收入明显低于历史均值时需解释收款、库存或应付款改善",
+            "复核账期、存货周转、客户结构和供应链议价能力。",
+        ),
+    ]
+
+    status_fills = {
+        "通过": PatternFill("solid", fgColor="E2F0D9"),
+        "关注": PatternFill("solid", fgColor="FFF2CC"),
+        "不通过": PatternFill("solid", fgColor="FCE4D6"),
+    }
+    for row_idx, row_values in enumerate(checks, start=4):
+        for col_idx, value in enumerate(row_values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            if col_idx in {3, 4} and isinstance(value, str) and value.startswith("="):
+                apply_formula_style(cell)
+            if col_idx in {5, 6}:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+        ws[f"C{row_idx}"].number_format = "0.0%"
+
+    for row_idx in range(4, 10):
+        for status, fill in status_fills.items():
+            ws.conditional_formatting.add(
+                f"D{row_idx}",
+                CellIsRule(operator="equal", formula=[f'"{status}"'], fill=fill),
+            )
+    add_note(ws, "A12", "本页用于暴露DCF最常见的乐观偏差；出现“关注/不通过”不代表模型不能用，但需要在假设中写清楚原因。")
+    ws.freeze_panes = "A4"
+    set_col_widths(ws, {"A": 24, "B": 34, "C": 14, "D": 12, "E": 48, "F": 54})
+
+
+def create_scenario_dcf_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("Scenario_DCF")
+    ws["A1"] = "悲观 / 中性 / 乐观 DCF"
+    apply_title_style(ws["A1"])
+    ws.merge_cells("A1:F1")
+
+    headers = ["项目", "悲观", "中性", "乐观", "说明"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+    add_legend(ws, "F3")
+
+    base_growths = [float(x) for x in data["default_growths"]]
+    scenario_values = {
+        "pessimistic": {
+            "growths": [max(g - 0.03, -0.02) for g in base_growths],
+            "ebit_margin": max(float(data["base_ebit_margin"]) - 0.02, 0.01),
+            "tax_rate": min(float(data["base_tax_rate"]) + 0.02, 0.35),
+            "da_ratio": float(data["base_da_ratio"]),
+            "capex_ratio": min(float(data["base_capex_ratio"]) + 0.015, 0.18),
+            "nwc_ratio": min(float(data["base_nwc_ratio"]) + 0.03, 0.35),
+            "terminal_growth": 0.01,
+            "wacc_ref": "WACC_Build!B18",
+        },
+        "neutral": {
+            "growths": base_growths,
+            "ebit_margin": float(data["base_ebit_margin"]),
+            "tax_rate": float(data["base_tax_rate"]),
+            "da_ratio": float(data["base_da_ratio"]),
+            "capex_ratio": float(data["base_capex_ratio"]),
+            "nwc_ratio": float(data["base_nwc_ratio"]),
+            "terminal_growth": float(data["valuation_config"]["dcf"]["terminal_growth"]),
+            "wacc_ref": "WACC_Build!C18",
+        },
+        "optimistic": {
+            "growths": [min(g + 0.03, 0.25) for g in base_growths],
+            "ebit_margin": min(float(data["base_ebit_margin"]) + 0.02, 0.40),
+            "tax_rate": max(float(data["base_tax_rate"]) - 0.02, 0.08),
+            "da_ratio": float(data["base_da_ratio"]),
+            "capex_ratio": max(float(data["base_capex_ratio"]) - 0.01, 0.005),
+            "nwc_ratio": max(float(data["base_nwc_ratio"]) - 0.02, 0.0),
+            "terminal_growth": 0.04,
+            "wacc_ref": "WACC_Build!D18",
+        },
+    }
+    scenario_keys = ["pessimistic", "neutral", "optimistic"]
+    scenario_cols = {"pessimistic": "B", "neutral": "C", "optimistic": "D"}
+
+    input_rows = [
+        (4, "基准收入", data["revenue"][-1], data["revenue"][-1], data["revenue"][-1], f"{data['base_year']}A Revenue"),
+        (5, "基准营运资本", data["nwc"][-1], data["nwc"][-1], data["nwc"][-1], f"{data['base_year']}A Operating NWC"),
+        (6, "净现金/(净债务)", "=Assumptions!B5", "=Assumptions!B5", "=Assumptions!B5", "用于 EV 到权益价值桥接"),
+        (7, "少数股东权益", "=Assumptions!B8", "=Assumptions!B8", "=Assumptions!B8", "权益价值扣减项"),
+        (8, "长期金融投资加回", "=Assumptions!B9", "=Assumptions!B9", "=Assumptions!B9", "非经营资产加回"),
+        (9, "非经营流动资产加回", "=Assumptions!B10", "=Assumptions!B10", "=Assumptions!B10", "非经营资产加回"),
+        (10, "总股本", "=Assumptions!B3", "=Assumptions!B3", "=Assumptions!B3", "每股价值分母"),
+    ]
+    for row, label, pess, neutral, optimistic, note in input_rows:
+        ws[f"A{row}"] = label
+        ws[f"B{row}"] = pess
+        ws[f"C{row}"] = neutral
+        ws[f"D{row}"] = optimistic
+        ws[f"E{row}"] = note
+        for col in ["B", "C", "D"]:
+            if isinstance(ws[f"{col}{row}"].value, str):
+                apply_formula_style(ws[f"{col}{row}"])
+            else:
+                apply_input_style(ws[f"{col}{row}"])
+            ws[f"{col}{row}"].number_format = '#,##0.00'
+
+    ws["A12"] = "收入增速 Year 1"
+    ws["A13"] = "收入增速 Year 2"
+    ws["A14"] = "收入增速 Year 3"
+    ws["A15"] = "收入增速 Year 4"
+    ws["A16"] = "收入增速 Year 5"
+    ws["A17"] = "EBIT率"
+    ws["A18"] = "税率"
+    ws["A19"] = "D&A / Revenue"
+    ws["A20"] = "CapEx / Revenue"
+    ws["A21"] = "NWC / Revenue"
+    ws["A22"] = "WACC"
+    ws["A23"] = "永续增长率 g"
+    for row in range(12, 24):
+        ws[f"E{row}"] = "黄色为可编辑情景假设；中性情景默认等于 Assumptions / WACC_Build。"
+
+    for key in scenario_keys:
+        col = scenario_cols[key]
+        values = scenario_values[key]
+        for offset, growth in enumerate(values["growths"], start=12):
+            ws[f"{col}{offset}"] = growth
+            apply_input_style(ws[f"{col}{offset}"])
+            ws[f"{col}{offset}"].number_format = "0.0%"
+        for row, metric in [(17, "ebit_margin"), (18, "tax_rate"), (19, "da_ratio"), (20, "capex_ratio"), (21, "nwc_ratio")]:
+            ws[f"{col}{row}"] = values[metric]
+            apply_input_style(ws[f"{col}{row}"])
+            ws[f"{col}{row}"].number_format = "0.0%"
+        ws[f"{col}22"] = f"={values['wacc_ref']}"
+        apply_formula_style(ws[f"{col}22"])
+        ws[f"{col}22"].number_format = "0.0%"
+        ws[f"{col}23"] = values["terminal_growth"]
+        apply_input_style(ws[f"{col}23"])
+        ws[f"{col}23"].number_format = "0.0%"
+
+    forecast_start_rows = {"pessimistic": 27, "neutral": 43, "optimistic": 59}
+    forecast_metrics = [
+        "Revenue",
+        "EBIT",
+        "Tax on EBIT",
+        "NOPAT",
+        "D&A",
+        "CapEx",
+        "Operating NWC",
+        "Change in NWC",
+        "FCFF",
+        "PV of FCFF",
+        "Terminal Value",
+        "PV of Terminal Value",
+        "Enterprise Value",
+        "Equity Value",
+        "Value / Share",
+    ]
+    scenario_titles = {"pessimistic": "悲观情景", "neutral": "中性情景", "optimistic": "乐观情景"}
+    for key in scenario_keys:
+        start = forecast_start_rows[key]
+        source_col = scenario_cols[key]
+        ws[f"A{start}"] = scenario_titles[key]
+        apply_header_style(ws[f"A{start}"])
+        for idx, year in enumerate(data["forecast_years"], start=2):
+            cell = ws.cell(row=start, column=idx, value=year)
+            apply_header_style(cell)
+        for offset, metric in enumerate(forecast_metrics, start=1):
+            ws.cell(row=start + offset, column=1, value=metric)
+
+        revenue_row = start + 1
+        ebit_row = start + 2
+        tax_row = start + 3
+        nopat_row = start + 4
+        da_row = start + 5
+        capex_row = start + 6
+        nwc_row = start + 7
+        delta_nwc_row = start + 8
+        fcff_row = start + 9
+        pv_fcff_row = start + 10
+        tv_row = start + 11
+        pv_tv_row = start + 12
+        ev_row = start + 13
+        equity_row = start + 14
+        price_row = start + 15
+
+        for year_idx in range(5):
+            col = get_column_letter(2 + year_idx)
+            prev_col = get_column_letter(1 + year_idx)
+            growth_row = 12 + year_idx
+            if year_idx == 0:
+                ws[f"{col}{revenue_row}"] = f"={source_col}$4*(1+{source_col}${growth_row})"
+                ws[f"{col}{delta_nwc_row}"] = f"={col}{nwc_row}-{source_col}$5"
+            else:
+                ws[f"{col}{revenue_row}"] = f"={prev_col}{revenue_row}*(1+{source_col}${growth_row})"
+                ws[f"{col}{delta_nwc_row}"] = f"={col}{nwc_row}-{prev_col}{nwc_row}"
+            ws[f"{col}{ebit_row}"] = f"={col}{revenue_row}*{source_col}$17"
+            ws[f"{col}{tax_row}"] = f"={col}{ebit_row}*{source_col}$18"
+            ws[f"{col}{nopat_row}"] = f"={col}{ebit_row}-{col}{tax_row}"
+            ws[f"{col}{da_row}"] = f"={col}{revenue_row}*{source_col}$19"
+            ws[f"{col}{capex_row}"] = f"={col}{revenue_row}*{source_col}$20"
+            ws[f"{col}{nwc_row}"] = f"={col}{revenue_row}*{source_col}$21"
+            ws[f"{col}{fcff_row}"] = f"={col}{nopat_row}+{col}{da_row}-{col}{capex_row}-{col}{delta_nwc_row}"
+            ws[f"{col}{pv_fcff_row}"] = f"={col}{fcff_row}/(1+{source_col}$22)^{year_idx + 1}"
+
+        year5_col = "F"
+        ws[f"B{tv_row}"] = f"={year5_col}{fcff_row}*(1+{source_col}$23)/({source_col}$22-{source_col}$23)"
+        ws[f"B{pv_tv_row}"] = f"=B{tv_row}/(1+{source_col}$22)^5"
+        ws[f"B{ev_row}"] = f"=SUM(B{pv_fcff_row}:F{pv_fcff_row})+B{pv_tv_row}"
+        ws[f"B{equity_row}"] = f"=B{ev_row}+{source_col}$6-{source_col}$7+{source_col}$8+{source_col}$9"
+        ws[f"B{price_row}"] = f"=B{equity_row}/{source_col}$10"
+        for row in [tv_row, pv_tv_row, ev_row, equity_row, price_row]:
+            for col in ["C", "D", "E", "F"]:
+                ws[f"{col}{row}"] = ""
+
+        for row in range(start + 1, start + 16):
+            for col_idx in range(2, 7):
+                cell = ws.cell(row=row, column=col_idx)
+                if cell.value not in (None, ""):
+                    if row == price_row:
+                        apply_output_style(cell)
+                        cell.number_format = "0.00"
+                    else:
+                        apply_formula_style(cell)
+                        cell.number_format = '#,##0.00'
+
+    ws["H27"] = "情景结果汇总"
+    apply_header_style(ws["H27"])
+    for col, header in zip(["I", "J", "K"], ["悲观", "中性", "乐观"]):
+        ws[f"{col}27"] = header
+        apply_header_style(ws[f"{col}27"])
+    summary_rows = [
+        (28, "企业价值 EV", 40),
+        (29, "股东权益价值", 41),
+        (30, "每股价值", 42),
+        (31, "相对当前股价空间", None),
+    ]
+    for row, label, source_offset in summary_rows:
+        ws[f"H{row}"] = label
+        for col, key in zip(["I", "J", "K"], scenario_keys):
+            if source_offset is None:
+                ws[f"{col}{row}"] = f"={col}{30}/Assumptions!$B$4-1"
+                ws[f"{col}{row}"].number_format = "0.0%"
+            else:
+                source_row = forecast_start_rows[key] + (source_offset - 27)
+                ws[f"{col}{row}"] = f"=B{source_row}"
+                ws[f"{col}{row}"].number_format = "0.00" if row == 30 else '#,##0.00'
+            apply_output_style(ws[f"{col}{row}"])
+
+    add_note(ws, "A76", "本页是真正的三情景DCF：收入增速、利润率、税率、CapEx、营运资本、WACC、永续增长率会一起变化。黄色格可编辑，蓝色格为情景估值结果。")
+    ws.freeze_panes = "B4"
+    set_col_widths(ws, {"A": 24, "B": 14, "C": 14, "D": 14, "E": 14, "F": 14, "H": 18, "I": 14, "J": 14, "K": 14})
 
 
 def create_sensitivity_sheet(wb: Workbook, data: Dict[str, object]) -> None:
@@ -767,7 +1463,7 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     for row, label, value, note, multiple_formula in current_metric_rows:
         ws[f"A{row}"] = label
         if row == 14:
-            ws[f"B{row}"] = "=Historical!K20"
+            ws[f"B{row}"] = float(data["total_equity"][-1])
             ws[f"C{row}"] = note
             ws[f"E{row}"] = "=B6/B14"
         else:
@@ -777,8 +1473,6 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
         if row != 14:
             ws[f"D{row}"] = ""
         apply_formula_style(ws[f"E{row}"])
-        if row == 14:
-            apply_formula_style(ws[f"B{row}"])
 
     ws["D13"] = "PE"
     ws["D14"] = "PB"
@@ -825,14 +1519,15 @@ def create_comparable_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["B25"] = "综合参考价"
     ws["C25"] = "=AVERAGE(D20:D24)"
     ws["D25"] = "相对估值中性情景均值"
-    apply_formula_style(ws["C25"])
+    apply_output_style(ws["C25"])
 
     ws["B26"] = "相对估值空间"
     ws["C26"] = "=C25/Assumptions!B4-1"
     ws["D26"] = "相对当前股价"
     apply_formula_style(ws["C26"])
 
-    add_note(ws, "A29", "F:H 为可编辑可比倍数假设；C:E 会自动反推对应股价。")
+    add_legend(ws, "G12")
+    add_note(ws, "A29", "F:H 黄色区域为可编辑可比倍数假设；C:E 会自动反推对应股价。")
     ws.freeze_panes = "A4"
     set_col_widths(ws, {"A": 18, "B": 16, "C": 24, "D": 14, "E": 14, "F": 10, "G": 10, "H": 10})
 
@@ -1090,15 +1785,16 @@ def finalize_workbook(wb: Workbook) -> None:
 def build_workbook(data: Dict[str, object]) -> Workbook:
     wb = Workbook()
     create_summary_sheet(wb, data)
-    create_historical_sheet(wb, data)
+    create_dcf_input_map_sheet(wb, data)
+    create_readiness_sheet(wb, data)
+    create_wacc_build_sheet(wb, data)
     create_assumptions_sheet(wb, data)
     create_forecast_sheet(wb, data)
     create_dcf_sheet(wb, data)
+    create_model_checks_sheet(wb, data)
+    create_scenario_dcf_sheet(wb, data)
     create_sensitivity_sheet(wb, data)
     create_comparable_sheet(wb, data)
-    create_investment_thesis_sheet(wb, data)
-    create_charts_sheet(wb, data)
-    create_rawdata_sheet(wb, data)
     finalize_workbook(wb)
     return wb
 
@@ -1124,6 +1820,7 @@ def main() -> None:
     args = parse_args()
     data_dir_value = args.data_dir_flag or args.data_dir
     data_dir = resolve_data_dir(data_dir_value) if data_dir_value else prompt_data_dir_with_dialog()
+    configure_results_paths(data_dir / "results")
     info_path = find_info_file(data_dir)
     if info_path is None:
         print(f"Info.csv not found in {data_dir}. Skipping DCF valuation.")

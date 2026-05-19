@@ -27,7 +27,6 @@ demo/rawdata/*.xlsx
 demo/rawdata/*.csv
 !demo/rawdata/.gitkeep
 !demo/rawdata/Info.csv
-!demo/rawdata/600406_debt_year.xls
-!demo/rawdata/600406_benefit_year.xls
-!demo/rawdata/600406_cash_year.xls
-!demo/rawdata/600406_price.xls
+!demo/rawdata/002311_debt_year.xls
+!demo/rawdata/002311_benefit_year.xls
+!demo/rawdata/002311_cash_year.xls

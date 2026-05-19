@@ -41,6 +41,7 @@ Equity
 -----------------------------------
 - 1_preprocess_bs.csv        去重、排序后的预处理表
 - 2_standardized_bs.csv      标准化长表（含小计和合计行）
+- 2_standardized_bs_wide.csv 标准化宽表（行为项目，列为时间）
 - 3_mapping_detail.csv       原始科目 → 标准科目映射明细
 - 4_analysis_bridge.csv      各标准科目的组成项拆解
 - 5_valuation_ready_bs.xlsx  可直接用于估值的 Excel 底稿
@@ -520,6 +521,19 @@ def build_standardized_bs_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
     return wide
 
 
+def build_standardized_bs_item_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
+    item_order = standardized_df["StandardLineItem"].drop_duplicates()
+    wide = standardized_df.pivot_table(
+        index="StandardLineItem",
+        columns="Year",
+        values="Value",
+        aggfunc="sum",
+        sort=False,
+    ).reindex(item_order).reset_index()
+    wide.columns.name = None
+    return wide
+
+
 def build_valuation_input_sheet(standardized_df: pd.DataFrame) -> pd.DataFrame:
     wide = build_standardized_bs_wide(standardized_df)
     year_cols = [c for c in wide.columns if isinstance(c, (int, float)) or str(c).isdigit()]
@@ -697,10 +711,11 @@ def generate_markdown_doc(pre_check_df: pd.DataFrame, rules: List[Dict]) -> str:
 
 1. `1_preprocess_bs.csv`：预处理后的资产负债表
 2. `2_standardized_bs.csv`：英文标准科目输出，适合建模
-3. `3_mapping_detail.csv`：原始科目到标准科目的映射关系
-4. `4_analysis_bridge.csv`：原始数据 → 标准科目 的桥接过程
-5. `5_valuation_ready_bs.xlsx`：可直接用于估值输入的Excel底稿
-6. `BS重构过程说明.md`：本说明文档
+3. `2_standardized_bs_wide.csv`：标准化宽表（行为项目，列为时间）
+4. `3_mapping_detail.csv`：原始科目到标准科目的映射关系
+5. `4_analysis_bridge.csv`：原始数据 → 标准科目 的桥接过程
+6. `5_valuation_ready_bs.xlsx`：可直接用于估值输入的Excel底稿
+7. `BS重构过程说明.md`：本说明文档
 """
 
 
@@ -835,6 +850,7 @@ def save_outputs(
     ensure_output_dir(output_dir)
     preprocess_df.to_csv(os.path.join(output_dir, "1_preprocess_bs.csv"), index=False, encoding="utf-8-sig")
     standardized_df.to_csv(os.path.join(output_dir, "2_standardized_bs.csv"), index=False, encoding="utf-8-sig")
+    build_standardized_bs_item_wide(standardized_df).to_csv(os.path.join(output_dir, "2_standardized_bs_wide.csv"), index=False, encoding="utf-8-sig")
     mapping_detail_df.to_csv(os.path.join(output_dir, "3_mapping_detail.csv"), index=False, encoding="utf-8-sig")
     bridge_df.to_csv(os.path.join(output_dir, "4_analysis_bridge.csv"), index=False, encoding="utf-8-sig")
     pre_check_df.to_csv(os.path.join(output_dir, "_preprocess_balance_check.csv"), index=False, encoding="utf-8-sig")

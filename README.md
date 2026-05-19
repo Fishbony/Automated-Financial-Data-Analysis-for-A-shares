@@ -177,7 +177,7 @@ python -m afda.run_pipeline --data-dir "D:/path/to/export-folder"
 | 5 | `afda.rebuild_balance_sheet` | `results/04_rebuilt_statements/balance_sheet/` |
 | 6 | `afda.rebuild_income_statement` | `results/04_rebuilt_statements/income_statement/` |
 | 7 | `afda.rebuild_cash_flow` | `results/04_rebuilt_statements/cash_flow/` |
-| 8 | `afda.validate_rebuilt_statements` | `results/rebuilt_statement_checks/` |
+| 8 | `afda.validate_rebuilt_statements` | `results/04_rebuilt_statements/rebuilt_statement_checks/` |
 | 9 | `afda.analyze_rebuilt_statements` | `results/rebuilt_statement_deepseek_analysis.md` |
 | 10 | `afda.generate_dcf_valuation` | `results/05_valuation/` |
 | 11 | `afda.generate_html_report` | `results/05_valuation/` |
@@ -233,8 +233,8 @@ HTML 看板包含：
 | `results/03_metrics/financial_core_metrics_report.md` | 财务指标分析报告 |
 | `results/03_metrics/missing_items_log.csv` | 缺失科目日志 |
 | `results/04_rebuilt_statements/*/5_valuation_ready_*.xlsx` | 三表估值输入底稿 |
-| `results/rebuilt_statement_checks/rebuilt_statement_checks.xlsx` | Rebuild 后 BS/PL/CF 标准化 CSV 的独立校验明细 |
-| `results/rebuilt_statement_checks/rebuilt_statement_checks_report.md` | Rebuild 后三表独立校验报告 |
+| `results/04_rebuilt_statements/rebuilt_statement_checks/rebuilt_statement_checks.xlsx` | Rebuild 后 BS/PL/CF 标准化 CSV 的独立校验明细 |
+| `results/04_rebuilt_statements/rebuilt_statement_checks/rebuilt_statement_checks_report.md` | Rebuild 后三表独立校验报告 |
 | `results/rebuilt_statement_deepseek_analysis.md` | DeepSeek 对 rebuild 后三表的简要分析、关注问题和潜在雷点 |
 | `results/05_valuation/DCF_valuation_model.xlsx` | DCF + 相对估值 Excel 工作簿 |
 | `results/05_valuation/financial_dcf_dashboard.html` | 财务与 DCF 可视化 HTML 看板 |

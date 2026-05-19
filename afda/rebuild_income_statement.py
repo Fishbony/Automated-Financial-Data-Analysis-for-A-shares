@@ -39,6 +39,7 @@ Per Share
 ------------------------------------
 - 1_preprocess_pl.csv        去重、排序后的预处理表
 - 2_standardized_pl.csv      标准化长表
+- 2_standardized_pl_wide.csv 标准化宽表（行为项目，列为时间）
 - 3_mapping_detail.csv       原始科目 → 标准科目映射
 - 4_analysis_bridge.csv      各标准科目的组成项拆解
 - 5_valuation_ready_pl.xlsx  可直接用于估值的 Excel 底稿
@@ -383,6 +384,19 @@ def build_standardized_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
     return wide
 
 
+def build_standardized_item_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
+    item_order = standardized_df["Standard Item"].drop_duplicates()
+    wide = standardized_df.pivot_table(
+        index="Standard Item",
+        columns="Year",
+        values="Value",
+        aggfunc="sum",
+        sort=False,
+    ).reindex(item_order).reset_index()
+    wide.columns.name = None
+    return wide
+
+
 def build_analysis_bridge(df: pd.DataFrame, item_col: str, year_cols: List[str], rules: List[Dict]) -> pd.DataFrame:
     rows = []
     for rule in rules:
@@ -496,6 +510,7 @@ def generate_markdown_doc(pre_check_df: pd.DataFrame, rules: List[Dict]) -> str:
 - `1_preprocess_pl.csv`：预处理后的利润表
 - `_preprocess_check.csv`：关键勾稽校验
 - `2_standardized_pl.csv`：标准化长表
+- `2_standardized_pl_wide.csv`：标准化宽表（行为项目，列为时间）
 - `3_mapping_detail.csv`：原始科目到标准科目的映射
 - `4_analysis_bridge.csv`：估值分析 bridge
 - `5_valuation_ready_pl.xlsx`：Excel 打包结果
@@ -606,6 +621,7 @@ def save_outputs(
     preprocess_df.to_csv(os.path.join(output_dir, "1_preprocess_pl.csv"), index=False, encoding="utf-8-sig")
     pre_check_df.to_csv(os.path.join(output_dir, "_preprocess_check.csv"), index=False, encoding="utf-8-sig")
     standardized_df.to_csv(os.path.join(output_dir, "2_standardized_pl.csv"), index=False, encoding="utf-8-sig")
+    build_standardized_item_wide(standardized_df).to_csv(os.path.join(output_dir, "2_standardized_pl_wide.csv"), index=False, encoding="utf-8-sig")
     mapping_detail_df.to_csv(os.path.join(output_dir, "3_mapping_detail.csv"), index=False, encoding="utf-8-sig")
     bridge_df.to_csv(os.path.join(output_dir, "4_analysis_bridge.csv"), index=False, encoding="utf-8-sig")
     pl_excel_path = os.path.join(output_dir, "5_valuation_ready_pl.xlsx")

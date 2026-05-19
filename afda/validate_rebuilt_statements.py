@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Iterable
 
 import pandas as pd
 
@@ -60,9 +60,32 @@ def rebuilt_paths() -> Dict[str, Path]:
     }
 
 
+def rebuilt_trace_paths() -> Dict[str, Dict[str, Path]]:
+    return {
+        "Balance Sheet": {
+            "preprocess": existing_path(pu.BS_REBUILT_DIR / "1_preprocess_bs.csv", pu.RESULTS_DIR / "BS_rebuilt_output" / "1_preprocess_bs.csv"),
+            "mapping": existing_path(pu.BS_REBUILT_DIR / "3_mapping_detail.csv", pu.RESULTS_DIR / "BS_rebuilt_output" / "3_mapping_detail.csv"),
+        },
+        "Income Statement": {
+            "preprocess": existing_path(pu.PL_REBUILT_DIR / "1_preprocess_pl.csv", pu.RESULTS_DIR / "PL_rebuilt_output" / "1_preprocess_pl.csv"),
+            "mapping": existing_path(pu.PL_REBUILT_DIR / "3_mapping_detail.csv", pu.RESULTS_DIR / "PL_rebuilt_output" / "3_mapping_detail.csv"),
+        },
+        "Cash Flow": {
+            "preprocess": existing_path(pu.CF_REBUILT_DIR / "1_preprocess_cf.csv", pu.RESULTS_DIR / "CF_rebuilt_output" / "1_preprocess_cf.csv"),
+            "mapping": existing_path(pu.CF_REBUILT_DIR / "3_mapping_detail.csv", pu.RESULTS_DIR / "CF_rebuilt_output" / "3_mapping_detail.csv"),
+        },
+    }
+
+
 def read_csv(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Required rebuilt standardized file not found: {path}")
+    return pd.read_csv(path, encoding="utf-8-sig")
+
+
+def read_optional_csv(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
     return pd.read_csv(path, encoding="utf-8-sig")
 
 
@@ -108,6 +131,248 @@ def specs_to_df(specs: list[CheckSpec]) -> pd.DataFrame:
                 }
             )
     return pd.DataFrame(rows)
+
+
+CHECK_ITEMS: Dict[tuple[str, str], Dict[str, list[str]]] = {
+    ("Balance Sheet", "Assets subtotal"): {
+        "lhs": ["Total Assets"],
+        "rhs": ["Total Current Assets", "Total Non-current Assets"],
+    },
+    ("Balance Sheet", "Liabilities subtotal"): {
+        "lhs": ["Total Liabilities"],
+        "rhs": ["Total Current Liabilities", "Total Non-current Liabilities"],
+    },
+    ("Balance Sheet", "Equity subtotal"): {
+        "lhs": ["Total Equity"],
+        "rhs": ["Parent Contributed Capital", "Parent Retained Earnings", "Other Comprehensive Income (OCI)", "Minority Interest"],
+    },
+    ("Balance Sheet", "Liabilities and equity subtotal"): {
+        "lhs": ["Total Liabilities & Equity"],
+        "rhs": ["Total Liabilities", "Total Equity"],
+    },
+    ("Balance Sheet", "Balance difference definition"): {
+        "lhs": ["Balance Check Difference"],
+        "rhs": ["Total Assets", "Total Liabilities & Equity"],
+    },
+    ("Balance Sheet", "Accounting equation after recorded difference"): {
+        "lhs": ["Total Assets"],
+        "rhs": ["Total Liabilities & Equity", "Balance Check Difference"],
+    },
+    ("Income Statement", "Operating profit bridge"): {
+        "lhs": ["Operating Profit"],
+        "rhs": [
+            "Revenue",
+            "COGS",
+            "Taxes & Surcharges",
+            "Selling Expense",
+            "Admin Expense",
+            "R&D Expense",
+            "Financial Expense",
+            "Asset / Credit Impairment",
+            "Other Operating Gains",
+        ],
+    },
+    ("Income Statement", "Profit before tax bridge"): {
+        "lhs": ["Profit Before Tax"],
+        "rhs": ["Operating Profit", "Non-operating Income", "Non-operating Expense"],
+    },
+    ("Income Statement", "Net profit bridge"): {
+        "lhs": ["Net Profit"],
+        "rhs": ["Profit Before Tax", "Income Tax"],
+    },
+    ("Income Statement", "Net profit attribution"): {
+        "lhs": ["Net Profit"],
+        "rhs": ["Parent Net Profit", "Minority Interest Profit"],
+    },
+    ("Income Statement", "Parent comprehensive income bridge"): {
+        "lhs": ["Parent Comprehensive Income"],
+        "rhs": ["Parent Net Profit", "Parent OCI"],
+    },
+    ("Cash Flow", "Operating cash flow bridge"): {
+        "lhs": ["Operating Cash Flow"],
+        "rhs": [
+            "Cash From Customers",
+            "Tax Refunds",
+            "Other Operating Cash In",
+            "Cash Paid to Suppliers",
+            "Cash Paid to Employees",
+            "Taxes Paid",
+            "Other Operating Cash Out",
+        ],
+    },
+    ("Cash Flow", "Investing cash flow bridge"): {
+        "lhs": ["Investing Cash Flow"],
+        "rhs": [
+            "Investment Recovery Cash In",
+            "Investment Income Cash In",
+            "Asset Disposal Cash In",
+            "Other Investing Cash In",
+            "Capex",
+            "Investment Cash Out",
+        ],
+    },
+    ("Cash Flow", "Financing cash flow bridge"): {
+        "lhs": ["Financing Cash Flow"],
+        "rhs": [
+            "Equity Financing Cash In",
+            "Debt Financing Cash In",
+            "Other Financing Cash In",
+            "Debt Repayment Cash Out",
+            "Dividend & Interest Cash Out",
+            "Other Financing Cash Out",
+        ],
+    },
+    ("Cash Flow", "Net cash change bridge"): {
+        "lhs": ["Net Change in Cash"],
+        "rhs": ["Operating Cash Flow", "Investing Cash Flow", "Financing Cash Flow", "FX Impact"],
+    },
+    ("Cash Flow", "Ending cash bridge"): {
+        "lhs": ["Ending Cash"],
+        "rhs": ["Beginning Cash", "Net Change in Cash"],
+    },
+    ("Cash Flow", "Indirect CFO bridge"): {
+        "lhs": ["Indirect Operating Cash Flow"],
+        "rhs": [
+            "Net Profit",
+            "Impairment Add-back",
+            "Depreciation",
+            "Amortization",
+            "Asset Disposal Loss",
+            "Fair Value Loss",
+            "Financial Expense Bridge",
+            "Investment Loss",
+            "Deferred Tax Impact",
+            "Inventory Change",
+            "Receivables Change",
+            "Payables Change",
+            "Other CFO Bridge",
+        ],
+    },
+}
+
+
+DERIVED_COMPONENTS: Dict[str, list[str]] = {
+    "Total Current Assets": ["Cash & Short-term Financial Assets", "Core Operating Current Assets", "Non-operating Misc. Current Assets"],
+    "Total Non-current Assets": [
+        "Long-term Core Operating Assets",
+        "Long-term Financial & Equity Investments",
+        "Risk & Amortizing Assets",
+        "Tax & Other Long-term Assets",
+    ],
+    "Total Assets": ["Total Current Assets", "Total Non-current Assets"],
+    "Total Current Liabilities": [
+        "Interest-bearing Short-term Debt",
+        "Operating Non-interest-bearing Current Liabilities",
+        "Non-operating Misc. Current Liabilities",
+    ],
+    "Total Non-current Liabilities": [
+        "Long-term Interest-bearing Debt",
+        "Long-term Operating Non-interest-bearing Liabilities",
+        "Tax & Subsidy-related Non-cash Liabilities",
+    ],
+    "Total Liabilities": ["Total Current Liabilities", "Total Non-current Liabilities"],
+    "Total Equity": ["Parent Contributed Capital", "Parent Retained Earnings", "Other Comprehensive Income (OCI)", "Minority Interest"],
+    "Total Liabilities & Equity": ["Total Liabilities", "Total Equity"],
+    "Balance Check Difference": ["Total Assets", "Total Liabilities & Equity"],
+}
+
+
+def unique_preserve_order(values: Iterable[str]) -> list[str]:
+    seen = set()
+    out = []
+    for value in values:
+        if value and value not in seen:
+            seen.add(value)
+            out.append(value)
+    return out
+
+
+def build_source_lookup(mapping_df: pd.DataFrame) -> Dict[str, list[str]]:
+    if mapping_df.empty:
+        return {}
+    if {"标准科目", "原始科目"}.issubset(mapping_df.columns):
+        standard_col = "标准科目"
+        source_col = "原始科目"
+    elif {"Standard Item", "Source Item"}.issubset(mapping_df.columns):
+        standard_col = "Standard Item"
+        source_col = "Source Item"
+    else:
+        return {}
+    lookup: Dict[str, list[str]] = {}
+    for standard, group in mapping_df.groupby(standard_col, sort=False):
+        lookup[str(standard)] = unique_preserve_order(str(x) for x in group[source_col].dropna().tolist())
+    return lookup
+
+
+def preprocess_item_set(preprocess_df: pd.DataFrame) -> set[str]:
+    if preprocess_df.empty:
+        return set()
+    item_col = preprocess_df.columns[0]
+    return {str(x) for x in preprocess_df[item_col].dropna().tolist()}
+
+
+def expand_standard_items(items: list[str], source_lookup: Dict[str, list[str]]) -> Dict[str, list[str]]:
+    expanded: Dict[str, list[str]] = {}
+
+    def resolve(item: str, trail: tuple[str, ...] = ()) -> list[str]:
+        if item in source_lookup:
+            return source_lookup[item]
+        if item in trail:
+            return []
+        sources: list[str] = []
+        for component in DERIVED_COMPONENTS.get(item, []):
+            sources.extend(resolve(component, trail + (item,)))
+        return unique_preserve_order(sources)
+
+    for item in items:
+        expanded[item] = resolve(item)
+    return expanded
+
+
+def format_source_map(source_map: Dict[str, list[str]], existing_items: set[str]) -> str:
+    parts = []
+    for standard_item, source_items in source_map.items():
+        if not source_items:
+            parts.append(f"{standard_item}: 未在映射表中找到对应的 1_preprocess 项目")
+            continue
+        decorated = []
+        for source in source_items:
+            suffix = "" if not existing_items or source in existing_items else "（未在 1_preprocess 中出现）"
+            decorated.append(f"{source}{suffix}")
+        parts.append(f"{standard_item}: " + "、".join(decorated))
+    return "；".join(parts)
+
+
+def add_source_trace(checks: pd.DataFrame, trace_paths: Dict[str, Dict[str, Path]]) -> pd.DataFrame:
+    out = checks.copy()
+    trace_context = {}
+    for statement, paths in trace_paths.items():
+        mapping_df = read_optional_csv(paths["mapping"])
+        preprocess_df = read_optional_csv(paths["preprocess"])
+        trace_context[statement] = {
+            "source_lookup": build_source_lookup(mapping_df),
+            "existing_items": preprocess_item_set(preprocess_df),
+            "preprocess_file": paths["preprocess"].name,
+        }
+
+    lhs_details = []
+    rhs_details = []
+    preprocess_files = []
+    for _, row in out.iterrows():
+        statement = str(row["Statement"])
+        check = str(row["Check"])
+        context = trace_context.get(statement, {"source_lookup": {}, "existing_items": set(), "preprocess_file": ""})
+        item_spec = CHECK_ITEMS.get((statement, check), {"lhs": [], "rhs": []})
+        lhs_map = expand_standard_items(item_spec["lhs"], context["source_lookup"])
+        rhs_map = expand_standard_items(item_spec["rhs"], context["source_lookup"])
+        lhs_details.append(format_source_map(lhs_map, context["existing_items"]))
+        rhs_details.append(format_source_map(rhs_map, context["existing_items"]))
+        preprocess_files.append(context["preprocess_file"])
+
+    out["Preprocess File"] = preprocess_files
+    out["LHS 1_preprocess Items"] = lhs_details
+    out["RHS 1_preprocess Items"] = rhs_details
+    return out
 
 
 def validate_bs(bs: pd.DataFrame) -> pd.DataFrame:
@@ -396,6 +661,9 @@ def build_markdown(checks: pd.DataFrame) -> str:
                 f"- {row['Statement']} / {row['Check']} / {int(row['Year'])}: "
                 f"差额 {fmt_money(float(row['Difference']))}，容忍度 {fmt_money(float(row['Tolerance']))}；公式：{row['Formula']}"
             )
+            lines.append(f"  - 来源文件：`{row['Preprocess File']}`")
+            lines.append(f"  - LHS 对应 1_preprocess 项目：{row['LHS 1_preprocess Items']}")
+            lines.append(f"  - RHS 对应 1_preprocess 项目：{row['RHS 1_preprocess Items']}")
 
     lines += ["", "## 校验公式", ""]
     for statement, group in checks.groupby("Statement", sort=False):
@@ -437,7 +705,12 @@ def main() -> None:
     bs_checks = validate_bs(read_csv(paths["balance_sheet"]))
     pl_checks = validate_pl(read_csv(paths["income_statement"]))
     cf_checks = validate_cf(read_csv(paths["cash_flow"]))
-    output_dir = pu.RESULTS_DIR / OUTPUT_DIR_NAME
+    trace_paths = rebuilt_trace_paths()
+    all_checks = add_source_trace(pd.concat([bs_checks, pl_checks, cf_checks], ignore_index=True), trace_paths)
+    bs_checks = all_checks[all_checks["Statement"] == "Balance Sheet"].copy()
+    pl_checks = all_checks[all_checks["Statement"] == "Income Statement"].copy()
+    cf_checks = all_checks[all_checks["Statement"] == "Cash Flow"].copy()
+    output_dir = pu.REBUILT_DIR / OUTPUT_DIR_NAME
     save_outputs(output_dir, bs_checks, pl_checks, cf_checks)
     failed = int((~pd.concat([bs_checks, pl_checks, cf_checks], ignore_index=True)["Passed"]).sum())
     print(f"Rebuilt statement checks generated: {output_dir}")
@@ -449,4 +722,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

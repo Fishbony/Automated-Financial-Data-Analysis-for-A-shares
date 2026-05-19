@@ -50,6 +50,7 @@ Indirect CFO Bridge（间接法附注）
 ------------------------------------
 - 1_preprocess_cf.csv        去重、排序后的预处理表
 - 2_standardized_cf.csv      标准化长表
+- 2_standardized_cf_wide.csv 标准化宽表（行为项目，列为时间）
 - 3_mapping_detail.csv       原始科目 → 标准科目映射
 - 4_analysis_bridge.csv      各标准科目的组成项拆解
 - 5_valuation_ready_cf.xlsx  可直接用于估值的 Excel 底稿
@@ -220,11 +221,11 @@ def build_mapping_rules() -> List[Dict]:
     return [
         {"standard_item": "Cash From Customers", "section": "Operating CF", "bucket": "Inflows", "source_items": ["销售商品、提供劳务收到的现金(元)"], "formula_desc": "销售商品、提供劳务收到的现金"},
         {"standard_item": "Tax Refunds", "section": "Operating CF", "bucket": "Inflows", "source_items": ["收到的税费与返还(元)"], "formula_desc": "收到的税费与返还"},
-        {"standard_item": "Other Operating Cash In", "section": "Operating CF", "bucket": "Inflows", "source_items": ["收到其他与经营活动有关的现金(元)"], "formula_desc": "收到其他与经营活动有关的现金"},
+        {"standard_item": "Other Operating Cash In", "section": "Operating CF", "bucket": "Inflows", "source_items": ["收到其他与经营活动有关的现金(元)"], "formula_desc": "收到其他与经营活动有关的现金 + 经营活动现金流入小计未列示残差"},
         {"standard_item": "Cash Paid to Suppliers", "section": "Operating CF", "bucket": "Outflows", "source_items": ["购买商品、接受劳务支付的现金(元)"], "formula_desc": "购买商品、接受劳务支付的现金"},
         {"standard_item": "Cash Paid to Employees", "section": "Operating CF", "bucket": "Outflows", "source_items": ["支付给职工以及为职工支付的现金(元)"], "formula_desc": "支付给职工以及为职工支付的现金"},
         {"standard_item": "Taxes Paid", "section": "Operating CF", "bucket": "Outflows", "source_items": ["支付的各项税费(元)"], "formula_desc": "支付的各项税费"},
-        {"standard_item": "Other Operating Cash Out", "section": "Operating CF", "bucket": "Outflows", "source_items": ["支付其他与经营活动有关的现金(元)"], "formula_desc": "支付其他与经营活动有关的现金"},
+        {"standard_item": "Other Operating Cash Out", "section": "Operating CF", "bucket": "Outflows", "source_items": ["支付其他与经营活动有关的现金(元)"], "formula_desc": "支付其他与经营活动有关的现金 + 经营活动现金流出小计未列示残差"},
         {"standard_item": "Operating Cash Flow", "section": "Operating CF", "bucket": "Net", "source_items": ["经营活动产生的现金流量净额(元)"], "formula_desc": "经营活动产生的现金流量净额"},
         {"standard_item": "Investment Recovery Cash In", "section": "Investing CF", "bucket": "Inflows", "source_items": ["收回投资收到的现金(元)"], "formula_desc": "收回投资收到的现金"},
         {"standard_item": "Investment Income Cash In", "section": "Investing CF", "bucket": "Inflows", "source_items": ["取得投资收益收到的现金(元)"], "formula_desc": "取得投资收益收到的现金"},
@@ -233,11 +234,11 @@ def build_mapping_rules() -> List[Dict]:
         {"standard_item": "Capex", "section": "Investing CF", "bucket": "Outflows", "source_items": ["购建固定资产、无形资产和其他长期资产支付的现金(元)"], "formula_desc": "购建固定资产、无形资产和其他长期资产支付的现金"},
         {"standard_item": "Investment Cash Out", "section": "Investing CF", "bucket": "Outflows", "source_items": ["投资支付的现金(元)", "取得子公司及其他营业单位支付的现金净额(元)", "支付其他与投资活动有关的现金(元)"], "formula_desc": "投资支付现金及其他投资流出"},
         {"standard_item": "Investing Cash Flow", "section": "Investing CF", "bucket": "Net", "source_items": ["投资活动产生的现金流量净额(元)"], "formula_desc": "投资活动产生的现金流量净额"},
-        {"standard_item": "Equity Financing Cash In", "section": "Financing CF", "bucket": "Inflows", "source_items": ["吸收投资收到的现金(元)", "其中：子公司吸收少数股东投资收到的现金(元)"], "formula_desc": "吸收投资收到的现金"},
+        {"standard_item": "Equity Financing Cash In", "section": "Financing CF", "bucket": "Inflows", "source_items": ["吸收投资收到的现金(元)"], "formula_desc": "吸收投资收到的现金"},
         {"standard_item": "Debt Financing Cash In", "section": "Financing CF", "bucket": "Inflows", "source_items": ["取得借款收到的现金(元)"], "formula_desc": "取得借款收到的现金"},
         {"standard_item": "Other Financing Cash In", "section": "Financing CF", "bucket": "Inflows", "source_items": ["收到其他与筹资活动有关的现金(元)"], "formula_desc": "收到其他与筹资活动有关的现金"},
         {"standard_item": "Debt Repayment Cash Out", "section": "Financing CF", "bucket": "Outflows", "source_items": ["偿还债务支付的现金(元)"], "formula_desc": "偿还债务支付的现金"},
-        {"standard_item": "Dividend & Interest Cash Out", "section": "Financing CF", "bucket": "Outflows", "source_items": ["分配股利、利润或偿付利息支付的现金(元)", "其中：子公司支付给少数股东的股利、利润(元)"], "formula_desc": "分配股利、利润或偿付利息支付的现金"},
+        {"standard_item": "Dividend & Interest Cash Out", "section": "Financing CF", "bucket": "Outflows", "source_items": ["分配股利、利润或偿付利息支付的现金(元)"], "formula_desc": "分配股利、利润或偿付利息支付的现金"},
         {"standard_item": "Other Financing Cash Out", "section": "Financing CF", "bucket": "Outflows", "source_items": ["支付其他与筹资活动有关的现金(元)"], "formula_desc": "支付其他与筹资活动有关的现金"},
         {"standard_item": "Financing Cash Flow", "section": "Financing CF", "bucket": "Net", "source_items": ["筹资活动产生的现金流量净额(元)"], "formula_desc": "筹资活动产生的现金流量净额"},
         {"standard_item": "FX Impact", "section": "Cash Reconciliation", "bucket": "Reconciliation", "source_items": ["四、汇率变动对现金及现金等价物的影响(元)"], "formula_desc": "汇率变动影响"},
@@ -256,7 +257,7 @@ def build_mapping_rules() -> List[Dict]:
         {"standard_item": "Inventory Change", "section": "Indirect CFO Bridge", "bucket": "Working Capital", "source_items": ["存货的减少(元)"], "formula_desc": "存货变动"},
         {"standard_item": "Receivables Change", "section": "Indirect CFO Bridge", "bucket": "Working Capital", "source_items": ["经营性应收项目的减少(元)"], "formula_desc": "经营性应收项目变动"},
         {"standard_item": "Payables Change", "section": "Indirect CFO Bridge", "bucket": "Working Capital", "source_items": ["经营性应付项目的增加(元)"], "formula_desc": "经营性应付项目变动"},
-        {"standard_item": "Other CFO Bridge", "section": "Indirect CFO Bridge", "bucket": "Bridge", "source_items": ["其他(元)"], "formula_desc": "其他"},
+        {"standard_item": "Other CFO Bridge", "section": "Indirect CFO Bridge", "bucket": "Bridge", "source_items": ["其他(元)"], "formula_desc": "其他 + 间接法经营现金流未列示残差"},
         {"standard_item": "Indirect Operating Cash Flow", "section": "Indirect CFO Bridge", "bucket": "Result", "source_items": ["间接法-经营活动产生的现金流量净额(元)"], "formula_desc": "间接法经营现金流"},
     ]
 
@@ -278,6 +279,43 @@ def build_mapping_detail(df: pd.DataFrame, item_col: str, rules: List[Dict]) -> 
     return pd.DataFrame(rows)
 
 
+def calculate_residual_adjustments(df: pd.DataFrame, item_col: str, year_cols: List[str]) -> Dict[str, pd.Series]:
+    operating_inflow_items = [
+        "销售商品、提供劳务收到的现金(元)",
+        "收到的税费与返还(元)",
+        "收到其他与经营活动有关的现金(元)",
+    ]
+    operating_outflow_items = [
+        "购买商品、接受劳务支付的现金(元)",
+        "支付给职工以及为职工支付的现金(元)",
+        "支付的各项税费(元)",
+        "支付其他与经营活动有关的现金(元)",
+    ]
+    indirect_component_items = [
+        "净利润(元)",
+        "加：资产减值准备(元)",
+        "固定资产折旧、油气资产折耗、生产性生物资产折旧(元)",
+        "无形资产摊销(元)",
+        "长期待摊费用摊销(元)",
+        "处置固定资产、无形资产和其他长期资产的损失(元)",
+        "固定资产报废损失(元)",
+        "公允价值变动损失(元)",
+        "财务费用(元)",
+        "投资损失(元)",
+        "递延所得税资产减少(元)",
+        "递延所得税负债增加(元)",
+        "存货的减少(元)",
+        "经营性应收项目的减少(元)",
+        "经营性应付项目的增加(元)",
+        "其他(元)",
+    ]
+    return {
+        "Other Operating Cash In": safe_row_sum(df, item_col, year_cols, ["经营活动现金流入小计(元)"]) - safe_row_sum(df, item_col, year_cols, operating_inflow_items),
+        "Other Operating Cash Out": safe_row_sum(df, item_col, year_cols, ["经营活动现金流出小计(元)"]) - safe_row_sum(df, item_col, year_cols, operating_outflow_items),
+        "Other CFO Bridge": safe_row_sum(df, item_col, year_cols, ["间接法-经营活动产生的现金流量净额(元)"]) - safe_row_sum(df, item_col, year_cols, indirect_component_items),
+    }
+
+
 def build_standardized_cf(df: pd.DataFrame, item_col: str, year_cols: List[str], rules: List[Dict]) -> pd.DataFrame:
     rows = []
     for rule in rules:
@@ -292,7 +330,17 @@ def build_standardized_cf(df: pd.DataFrame, item_col: str, year_cols: List[str],
                     "Value": float(values[year]),
                 }
             )
-    return pd.DataFrame(rows)
+    standardized_df = pd.DataFrame(rows)
+
+    def add_adjustment(standard_item: str, adjustment: pd.Series) -> None:
+        mask = standardized_df["Standard Item"] == standard_item
+        for year in year_cols:
+            standardized_df.loc[mask & (standardized_df["Year"] == year), "Value"] += float(adjustment[year])
+
+    for standard_item, adjustment in calculate_residual_adjustments(df, item_col, year_cols).items():
+        add_adjustment(standard_item, adjustment)
+
+    return standardized_df
 
 
 def build_standardized_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
@@ -302,6 +350,19 @@ def build_standardized_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
         values="Value",
         aggfunc="sum",
     ).reset_index()
+    wide.columns.name = None
+    return wide
+
+
+def build_standardized_item_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
+    item_order = standardized_df["Standard Item"].drop_duplicates()
+    wide = standardized_df.pivot_table(
+        index="Standard Item",
+        columns="Year",
+        values="Value",
+        aggfunc="sum",
+        sort=False,
+    ).reindex(item_order).reset_index()
     wide.columns.name = None
     return wide
 
@@ -320,7 +381,21 @@ def build_analysis_bridge(df: pd.DataFrame, item_col: str, year_cols: List[str],
                 **{year: float(values[year]) for year in year_cols},
             }
         )
-    return pd.DataFrame(rows)
+    bridge_df = pd.DataFrame(rows)
+    residual_adjustments = calculate_residual_adjustments(df, item_col, year_cols)
+    residual_labels = {
+        "Other Operating Cash In": "经营活动现金流入小计未列示残差",
+        "Other Operating Cash Out": "经营活动现金流出小计未列示残差",
+        "Other CFO Bridge": "间接法经营现金流未列示残差",
+    }
+    for standard_item, adjustment in residual_adjustments.items():
+        mask = bridge_df["Standard Item"] == standard_item
+        if not mask.any():
+            continue
+        for year in year_cols:
+            bridge_df.loc[mask, year] = bridge_df.loc[mask, year].astype(float) + float(adjustment[year])
+        bridge_df.loc[mask, "Source Items"] = bridge_df.loc[mask, "Source Items"] + " + " + residual_labels[standard_item]
+    return bridge_df
 
 
 def build_valuation_input_sheet(standardized_df: pd.DataFrame) -> pd.DataFrame:
@@ -411,6 +486,7 @@ def generate_markdown_doc(pre_check_df: pd.DataFrame, rules: List[Dict]) -> str:
 - `1_preprocess_cf.csv`：预处理后的现金流量表
 - `_preprocess_check.csv`：关键勾稽校验
 - `2_standardized_cf.csv`：标准化长表
+- `2_standardized_cf_wide.csv`：标准化宽表（行为项目，列为时间）
 - `3_mapping_detail.csv`：原始科目到标准科目的映射
 - `4_analysis_bridge.csv`：估值分析 bridge
 - `5_valuation_ready_cf.xlsx`：Excel 打包结果
@@ -521,6 +597,7 @@ def save_outputs(
     preprocess_df.to_csv(os.path.join(output_dir, "1_preprocess_cf.csv"), index=False, encoding="utf-8-sig")
     pre_check_df.to_csv(os.path.join(output_dir, "_preprocess_check.csv"), index=False, encoding="utf-8-sig")
     standardized_df.to_csv(os.path.join(output_dir, "2_standardized_cf.csv"), index=False, encoding="utf-8-sig")
+    build_standardized_item_wide(standardized_df).to_csv(os.path.join(output_dir, "2_standardized_cf_wide.csv"), index=False, encoding="utf-8-sig")
     mapping_detail_df.to_csv(os.path.join(output_dir, "3_mapping_detail.csv"), index=False, encoding="utf-8-sig")
     bridge_df.to_csv(os.path.join(output_dir, "4_analysis_bridge.csv"), index=False, encoding="utf-8-sig")
     cf_excel_path = os.path.join(output_dir, "5_valuation_ready_cf.xlsx")

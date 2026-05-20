@@ -140,12 +140,15 @@ def build_preprocess_order() -> List[str]:
         "存货(元)",
         "其他应收款合计(元)",
         "其他流动资产(元)",
+        "划分为持有待售的资产(元)",
         "流动资产合计(元)",
         "固定资产合计(元)",
         "在建工程合计(元)",
+        "工程物资(元)",
         "无形资产(元)",
         "长期股权投资(元)",
         "其他权益工具投资(元)",
+        "其他非流动金融资产(元)",
         "投资性房地产(元)",
         "商誉(元)",
         "长期待摊费用(元)",
@@ -157,6 +160,7 @@ def build_preprocess_order() -> List[str]:
         "负债合计(元)",
         "短期借款(元)",
         "一年内到期的非流动负债(元)",
+        "以公允价值计量且其变动计入当期损益的金融负债(元)",
         "应付票据及应付账款(元)",
         "预收款项(元)",
         "合同负债(元)",
@@ -245,24 +249,24 @@ def build_mapping_rules() -> List[Dict]:
             "statement_side": "Assets",
             "bucket": "Current Assets",
             "classification": "非经营性杂项流动资产",
-            "source_items": ["其他流动资产(元)"],
-            "formula_desc": "其他流动资产",
+            "source_items": ["其他流动资产(元)", "划分为持有待售的资产(元)"],
+            "formula_desc": "其他流动资产 + 划分为持有待售的资产",
         },
         {
             "standard_item": "Long-term Core Operating Assets",
             "statement_side": "Assets",
             "bucket": "Non-current Assets",
             "classification": "长期经营性核心资产",
-            "source_items": ["固定资产合计(元)", "在建工程合计(元)", "无形资产(元)", "投资性房地产(元)"],
-            "formula_desc": "固定资产合计 + 在建工程合计 + 无形资产 + 投资性房地产",
+            "source_items": ["固定资产合计(元)", "在建工程合计(元)", "工程物资(元)", "无形资产(元)", "投资性房地产(元)"],
+            "formula_desc": "固定资产合计 + 在建工程合计 + 工程物资 + 无形资产 + 投资性房地产",
         },
         {
             "standard_item": "Long-term Financial & Equity Investments",
             "statement_side": "Assets",
             "bucket": "Non-current Assets",
             "classification": "长期对外财务&股权投资",
-            "source_items": ["长期股权投资(元)", "其他权益工具投资(元)", "可供出售金融资产(元)", "持有至到期投资(元)"],
-            "formula_desc": "长期股权投资 + 其他权益工具投资 + 可供出售金融资产 + 持有至到期投资",
+            "source_items": ["长期股权投资(元)", "其他权益工具投资(元)", "其他非流动金融资产(元)", "可供出售金融资产(元)", "持有至到期投资(元)"],
+            "formula_desc": "长期股权投资 + 其他权益工具投资 + 其他非流动金融资产 + 可供出售金融资产 + 持有至到期投资",
         },
         {
             "standard_item": "Risk & Amortizing Assets",
@@ -301,8 +305,8 @@ def build_mapping_rules() -> List[Dict]:
             "statement_side": "Liabilities",
             "bucket": "Current Liabilities",
             "classification": "非经营杂项流动负债",
-            "source_items": ["衍生金融负债(元)", "其他应付款合计(元)", "其他流动负债(元)"],
-            "formula_desc": "衍生金融负债 + 其他应付款合计 + 其他流动负债",
+            "source_items": ["衍生金融负债(元)", "以公允价值计量且其变动计入当期损益的金融负债(元)", "其他应付款合计(元)", "其他流动负债(元)"],
+            "formula_desc": "衍生金融负债 + 以公允价值计量且其变动计入当期损益的金融负债 + 其他应付款合计 + 其他流动负债",
         },
         {
             "standard_item": "Long-term Interest-bearing Debt",
@@ -334,6 +338,7 @@ def build_mapping_rules() -> List[Dict]:
             "bucket": "Equity",
             "classification": "归母投入股本",
             "source_items": ["实收资本（或股本）(元)", "资本公积(元)", "减：库存股(元)"],
+            "source_signs": {"减：库存股(元)": -1.0},
             "formula_desc": "实收资本（或股本） + 资本公积 - 库存股（若库存股为负则直接相加）",
         },
         {
@@ -360,6 +365,51 @@ def build_mapping_rules() -> List[Dict]:
             "source_items": ["少数股东权益(元)"],
             "formula_desc": "少数股东权益",
         },
+        {
+            "standard_item": "Other Current Assets / Residual",
+            "statement_side": "Assets",
+            "bucket": "Current Assets",
+            "classification": "流动资产剩余调节项",
+            "source_items": [],
+            "residual_target": "流动资产合计(元)",
+            "formula_desc": "流动资产合计 - 已映射流动资产明细",
+        },
+        {
+            "standard_item": "Other Non-current Assets / Residual",
+            "statement_side": "Assets",
+            "bucket": "Non-current Assets",
+            "classification": "非流动资产剩余调节项",
+            "source_items": [],
+            "residual_target": "非流动资产合计(元)",
+            "formula_desc": "非流动资产合计 - 已映射非流动资产明细",
+        },
+        {
+            "standard_item": "Other Current Liabilities / Residual",
+            "statement_side": "Liabilities",
+            "bucket": "Current Liabilities",
+            "classification": "流动负债剩余调节项",
+            "source_items": [],
+            "residual_target": "流动负债合计(元)",
+            "formula_desc": "流动负债合计 - 已映射流动负债明细",
+        },
+        {
+            "standard_item": "Other Non-current Liabilities / Residual",
+            "statement_side": "Liabilities",
+            "bucket": "Non-current Liabilities",
+            "classification": "非流动负债剩余调节项",
+            "source_items": [],
+            "residual_target": "非流动负债合计(元)",
+            "formula_desc": "非流动负债合计 - 已映射非流动负债明细",
+        },
+        {
+            "standard_item": "Other Equity / Residual",
+            "statement_side": "Equity",
+            "bucket": "Equity",
+            "classification": "权益剩余调节项",
+            "source_items": [],
+            "residual_target": "所有者权益（或股东权益）合计(元)",
+            "formula_desc": "所有者权益合计 - 已映射权益明细",
+        },
     ]
 
 
@@ -367,6 +417,17 @@ def build_mapping_detail(pre_df: pd.DataFrame, item_col: str, rules: List[Dict])
     rows = []
     existing_items = set(pre_df[item_col].tolist())
     for rule in rules:
+        if rule.get("residual_target"):
+            rows.append(
+                {
+                    "原始科目": rule["residual_target"],
+                    "标准科目": rule["standard_item"],
+                    "分类": f'{rule["statement_side"]} / {rule["bucket"]} / {rule["classification"]}',
+                    "是否合并": "剩余调节",
+                    "是否在原始表中存在": "是" if rule["residual_target"] in existing_items else "否",
+                }
+            )
+            continue
         for src in rule["source_items"]:
             rows.append(
                 {
@@ -383,9 +444,12 @@ def build_mapping_detail(pre_df: pd.DataFrame, item_col: str, rules: List[Dict])
 def build_standardized_bs(pre_df: pd.DataFrame, item_col: str, year_cols: List[str], rules: List[Dict]) -> pd.DataFrame:
     records = []
     for rule in rules:
+        if rule.get("residual_target"):
+            continue
         combined = pd.Series([0.0] * len(year_cols), index=year_cols)
         for src in rule["source_items"]:
-            combined = combined + safe_row_sum(pre_df, item_col, year_cols, src)
+            sign = float(rule.get("source_signs", {}).get(src, 1.0))
+            combined = combined + sign * safe_row_sum(pre_df, item_col, year_cols, src)
         for y in year_cols:
             records.append(
                 {
@@ -398,6 +462,32 @@ def build_standardized_bs(pre_df: pd.DataFrame, item_col: str, year_cols: List[s
             )
 
     std_long = pd.DataFrame(records)
+
+    residual_records = []
+    for rule in rules:
+        target_item = rule.get("residual_target")
+        if not target_item:
+            continue
+        side = rule["statement_side"]
+        bucket = rule["bucket"]
+        mapped = std_long[(std_long["StatementSide"] == side) & (std_long["Bucket"] == bucket)]
+        mapped_sum = mapped.groupby("Year")["Value"].sum() if not mapped.empty else pd.Series(0.0, index=year_cols)
+        mapped_sum = mapped_sum.reindex(year_cols).fillna(0.0)
+        target_total = safe_row_sum(pre_df, item_col, year_cols, target_item)
+        residual = target_total - mapped_sum
+        for y in year_cols:
+            residual_records.append(
+                {
+                    "StatementSide": side,
+                    "Bucket": bucket,
+                    "StandardLineItem": rule["standard_item"],
+                    "Year": y,
+                    "Value": float(residual[y]),
+                }
+            )
+    if residual_records:
+        std_long = pd.concat([std_long, pd.DataFrame(residual_records)], ignore_index=True)
+
     subtotal_rows = []
 
     def subtotal(side: str, bucket: str, line_name: str) -> None:
@@ -456,26 +546,31 @@ def build_standardized_bs(pre_df: pd.DataFrame, item_col: str, year_cols: List[s
         "Cash & Short-term Financial Assets",
         "Core Operating Current Assets",
         "Non-operating Misc. Current Assets",
+        "Other Current Assets / Residual",
         "Total Current Assets",
         "Long-term Core Operating Assets",
         "Long-term Financial & Equity Investments",
         "Risk & Amortizing Assets",
         "Tax & Other Long-term Assets",
+        "Other Non-current Assets / Residual",
         "Total Non-current Assets",
         "Total Assets",
         "Interest-bearing Short-term Debt",
         "Operating Non-interest-bearing Current Liabilities",
         "Non-operating Misc. Current Liabilities",
+        "Other Current Liabilities / Residual",
         "Total Current Liabilities",
         "Long-term Interest-bearing Debt",
         "Long-term Operating Non-interest-bearing Liabilities",
         "Tax & Subsidy-related Non-cash Liabilities",
+        "Other Non-current Liabilities / Residual",
         "Total Non-current Liabilities",
         "Total Liabilities",
         "Parent Contributed Capital",
         "Parent Retained Earnings",
         "Other Comprehensive Income (OCI)",
         "Minority Interest",
+        "Other Equity / Residual",
         "Total Equity",
         "Total Liabilities & Equity",
         "Balance Check Difference",
@@ -488,12 +583,19 @@ def build_standardized_bs(pre_df: pd.DataFrame, item_col: str, year_cols: List[s
 
 def build_analysis_bridge(pre_df: pd.DataFrame, item_col: str, year_cols: List[str], rules: List[Dict]) -> pd.DataFrame:
     rows = []
+    mapped_by_bucket: Dict[tuple[str, str], Dict[str, pd.Series]] = {}
     for rule in rules:
+        if rule.get("residual_target"):
+            continue
+        bucket_key = (rule["statement_side"], rule["bucket"])
+        mapped_by_bucket.setdefault(bucket_key, {})
+        series_total = pd.Series([0.0] * len(year_cols), index=year_cols)
         for y in year_cols:
             component_values = {}
             total_value = 0.0
             for src in rule["source_items"]:
-                val = float(safe_row_sum(pre_df, item_col, year_cols, src)[y])
+                sign = float(rule.get("source_signs", {}).get(src, 1.0))
+                val = float(sign * safe_row_sum(pre_df, item_col, year_cols, src)[y])
                 component_values[src] = val
                 total_value += val
             rows.append(
@@ -505,6 +607,36 @@ def build_analysis_bridge(pre_df: pd.DataFrame, item_col: str, year_cols: List[s
                     "Formula": rule["formula_desc"],
                     "ComponentBreakdownJSON": json.dumps(component_values, ensure_ascii=False),
                     "StandardLineItemValue": total_value,
+                }
+            )
+        for src in rule["source_items"]:
+            sign = float(rule.get("source_signs", {}).get(src, 1.0))
+            series_total = series_total + sign * safe_row_sum(pre_df, item_col, year_cols, src)
+        mapped_by_bucket[bucket_key][rule["standard_item"]] = series_total
+
+    for rule in rules:
+        target_item = rule.get("residual_target")
+        if not target_item:
+            continue
+        bucket_key = (rule["statement_side"], rule["bucket"])
+        mapped_components = mapped_by_bucket.get(bucket_key, {})
+        mapped_sum = pd.Series([0.0] * len(year_cols), index=year_cols)
+        for series in mapped_components.values():
+            mapped_sum = mapped_sum + series
+        target_total = safe_row_sum(pre_df, item_col, year_cols, target_item)
+        residual = target_total - mapped_sum
+        for y in year_cols:
+            component_values = {target_item: float(target_total[y])}
+            component_values.update({f"Less: {name}": float(-series[y]) for name, series in mapped_components.items()})
+            rows.append(
+                {
+                    "Year": y,
+                    "StatementSide": rule["statement_side"],
+                    "Bucket": rule["bucket"],
+                    "StandardLineItem": rule["standard_item"],
+                    "Formula": rule["formula_desc"],
+                    "ComponentBreakdownJSON": json.dumps(component_values, ensure_ascii=False),
+                    "StandardLineItemValue": float(residual[y]),
                 }
             )
     return pd.DataFrame(rows)
@@ -631,7 +763,7 @@ def generate_markdown_doc(pre_check_df: pd.DataFrame, rules: List[Dict]) -> str:
             f"- {r['Year']}: 资产端={r['Assets_CurrentPlusNonCurrent']:.2f}，负债+权益端={r['LiabPlusEquity']:.2f}，差额={r['Diff']:.2f}（{status}）"
         )
 
-    formula_lines = [f"- **{rule['standard_item']}** = {' + '.join(rule['source_items'])}" for rule in rules]
+    formula_lines = [f"- **{rule['standard_item']}** = {rule['formula_desc']}" for rule in rules]
     mapping_lines = [
         f"- `{rule['statement_side']} / {rule['bucket']} / {rule['classification']}` → **{rule['standard_item']}**：{rule['formula_desc']}"
         for rule in rules
@@ -701,7 +833,7 @@ def generate_markdown_doc(pre_check_df: pd.DataFrame, rules: List[Dict]) -> str:
 ## 7. 关键假设说明
 1. 原始表中缺失的标准科目组成项按0处理。
 2. 预处理阶段优先保留“合计”口径而非“其中”子项口径，以避免重复计算。
-3. `减：库存股(元)`保留原始符号；若源数据本身为负值，则在合并时直接相加。
+3. `减：库存股(元)`按抵减项处理：源数据为正数时从投入资本中扣除；若源数据本身为负值，则相当于加回。
 4. `其他应收款合计`默认归入核心经营性营运流动资产，后续可按公司具体业务进行再分类。
 5. 本次新增Excel估值底稿聚焦于资产负债表可直接支撑的估值输入：现金、债务、经营营运资本、少数股东权益与资本结构比率。
 6. 仅凭资产负债表无法独立完成完整DCF；完整DCF仍需接入利润表、现金流量表及经营假设。

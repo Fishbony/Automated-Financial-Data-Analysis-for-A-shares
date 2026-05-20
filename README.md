@@ -194,7 +194,7 @@ python -m afda.generate_html_report --data-dir "D:/path/to/export-folder"
 HTML 输出路径：
 
 ```text
-results/05_valuation/financial_dcf_dashboard.html
+results/financial_dcf_dashboard.html
 ```
 
 HTML 看板包含：
@@ -237,7 +237,7 @@ HTML 看板包含：
 | `results/04_rebuilt_statements/rebuilt_statement_checks/rebuilt_statement_checks_report.md` | Rebuild 后三表独立校验报告 |
 | `results/rebuilt_statement_deepseek_analysis.md` | DeepSeek 对 rebuild 后三表的简要分析、关注问题和潜在雷点 |
 | `results/05_valuation/DCF_valuation_model.xlsx` | DCF + 相对估值 Excel 工作簿 |
-| `results/05_valuation/financial_dcf_dashboard.html` | 财务与 DCF 可视化 HTML 看板 |
+| `results/financial_dcf_dashboard.html` | 财务与 DCF 可视化 HTML 看板 |
 
 ## 当前局限
 

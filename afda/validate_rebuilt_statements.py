@@ -144,7 +144,7 @@ CHECK_ITEMS: Dict[tuple[str, str], Dict[str, list[str]]] = {
     },
     ("Balance Sheet", "Equity subtotal"): {
         "lhs": ["Total Equity"],
-        "rhs": ["Parent Contributed Capital", "Parent Retained Earnings", "Other Comprehensive Income (OCI)", "Minority Interest"],
+        "rhs": ["Parent Contributed Capital", "Parent Retained Earnings", "Other Comprehensive Income (OCI)", "Minority Interest", "Other Equity / Residual"],
     },
     ("Balance Sheet", "Liabilities and equity subtotal"): {
         "lhs": ["Total Liabilities & Equity"],
@@ -154,9 +154,13 @@ CHECK_ITEMS: Dict[tuple[str, str], Dict[str, list[str]]] = {
         "lhs": ["Balance Check Difference"],
         "rhs": ["Total Assets", "Total Liabilities & Equity"],
     },
-    ("Balance Sheet", "Accounting equation after recorded difference"): {
+    ("Balance Sheet", "Balance check is zero"): {
+        "lhs": ["Balance Check Difference"],
+        "rhs": [],
+    },
+    ("Balance Sheet", "Accounting equation"): {
         "lhs": ["Total Assets"],
-        "rhs": ["Total Liabilities & Equity", "Balance Check Difference"],
+        "rhs": ["Total Liabilities & Equity"],
     },
     ("Income Statement", "Operating profit bridge"): {
         "lhs": ["Operating Profit"],
@@ -412,8 +416,8 @@ def validate_bs(bs: pd.DataFrame) -> pd.DataFrame:
             "Balance Sheet",
             "Equity subtotal",
             total_equity,
-            parent_capital + retained + oci + minority,
-            "Total Equity = Parent Contributed Capital + Parent Retained Earnings + OCI + Minority Interest",
+            parent_capital + retained + oci + minority + get(wide, "Other Equity / Residual"),
+            "Total Equity = Parent Contributed Capital + Parent Retained Earnings + OCI + Minority Interest + Other Equity / Residual",
             total_equity,
         ),
         make_check(
@@ -434,10 +438,18 @@ def validate_bs(bs: pd.DataFrame) -> pd.DataFrame:
         ),
         make_check(
             "Balance Sheet",
-            "Accounting equation after recorded difference",
+            "Balance check is zero",
+            balance_diff,
+            pd.Series(0.0, index=balance_diff.index, dtype="float64"),
+            "Balance Check Difference = 0",
             total_assets,
-            total_le + balance_diff,
-            "Total Assets = Total Liabilities & Equity + Balance Check Difference",
+        ),
+        make_check(
+            "Balance Sheet",
+            "Accounting equation",
+            total_assets,
+            total_le,
+            "Total Assets = Total Liabilities & Equity",
             total_assets,
         ),
     ]

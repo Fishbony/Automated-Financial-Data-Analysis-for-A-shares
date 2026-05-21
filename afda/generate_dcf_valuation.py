@@ -43,7 +43,6 @@ Comparable       — 相对估值（PE / PB / EV/EBIT / EV/EBITDA）
     python run_pipeline.py
 """
 
-import math
 import os
 import argparse
 from datetime import date
@@ -70,7 +69,23 @@ from afda.pipeline_utils import (
     resolve_data_dir,
 )
 from afda.excel_utils import apply_bilingual_fonts
-from afda.valuation_config import get_multiple, load_valuation_config
+from afda.dcf_core import (
+    DCF_INPUT_ITEMS,
+    avg,
+    build_assumption_audit_rows,
+    cagr,
+    clamp,
+    coefficient_of_variation,
+    count_positive,
+    dcf_item_usage,
+    get_series,
+    load_item_series,
+    load_wide_items,
+    safe_div,
+    trend_slope,
+    build_valuation_risk_warnings,
+)
+from afda.valuation_config import get_multiple, load_valuation_config, valuation_config_source_map
 
 
 BASE_DIR = Path(".")
@@ -83,35 +98,6 @@ CF_WIDE_PATH = CF_REBUILT_DIR / "2_standardized_cf_wide.csv"
 INFO_PATH = BASE_DIR / "demo" / "rawdata" / "Info.csv"
 OUTPUT_DIR = VALUATION_DIR
 OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
-
-
-DCF_INPUT_ITEMS = {
-    "PL": [
-        ("Revenue", "营业收入"),
-        ("Operating Profit", "营业利润"),
-        ("Financial Expense", "财务费用"),
-        ("Profit Before Tax", "利润总额"),
-        ("Income Tax", "所得税费用"),
-        ("Parent Net Profit", "归母净利润"),
-    ],
-    "BS": [
-        ("Cash & Short-term Financial Assets", "现金及短期金融资产"),
-        ("Interest-bearing Short-term Debt", "短期有息债务"),
-        ("Long-term Interest-bearing Debt", "长期有息债务"),
-        ("Core Operating Current Assets", "核心经营性流动资产"),
-        ("Operating Non-interest-bearing Current Liabilities", "经营性无息流动负债"),
-        ("Minority Interest", "少数股东权益"),
-        ("Total Equity", "股东权益"),
-        ("Long-term Financial & Equity Investments", "长期金融/股权投资"),
-        ("Non-operating Misc. Current Assets", "非经营性流动资产"),
-    ],
-    "CF": [
-        ("Operating Cash Flow", "经营活动现金流"),
-        ("Depreciation", "折旧"),
-        ("Amortization", "摊销"),
-        ("Capex", "资本开支"),
-    ],
-}
 
 
 def configure_results_paths(results_dir: Path) -> None:
@@ -128,81 +114,6 @@ def configure_results_paths(results_dir: Path) -> None:
     CF_WIDE_PATH = rebuilt_dir / "cash_flow" / "2_standardized_cf_wide.csv"
     OUTPUT_DIR = results_dir / "05_valuation"
     OUTPUT_PATH = OUTPUT_DIR / "DCF_valuation_model.xlsx"
-
-
-def load_item_series(df: pd.DataFrame, item_col: str, year_col: str, value_col: str) -> Dict[str, Dict[int, float]]:
-    out: Dict[str, Dict[int, float]] = {}
-    for _, row in df.iterrows():
-        item = str(row[item_col])
-        year = int(row[year_col])
-        value = float(row[value_col])
-        out.setdefault(item, {})[year] = value
-    return out
-
-
-def get_series(item_map: Dict[str, Dict[int, float]], item: str, years: List[int]) -> List[float]:
-    series = item_map.get(item, {})
-    return [float(series.get(year, 0.0)) for year in years]
-
-
-def load_wide_items(path: Path, item_col_candidates: List[str]) -> Dict[str, Dict[int, float]]:
-    if not path.exists():
-        return {}
-    wide = pd.read_csv(path)
-    item_col = next((col for col in item_col_candidates if col in wide.columns), wide.columns[0])
-    year_cols = [col for col in wide.columns if str(col).isdigit()]
-    out: Dict[str, Dict[int, float]] = {}
-    for _, row in wide.iterrows():
-        item = str(row[item_col]).strip()
-        out[item] = {}
-        for col in year_cols:
-            value = pd.to_numeric(row[col], errors="coerce")
-            out[item][int(col)] = 0.0 if pd.isna(value) else float(value)
-    return out
-
-
-def safe_div(numerator: float, denominator: float, fallback: float = 0.0) -> float:
-    return numerator / denominator if abs(denominator) > 1e-9 else fallback
-
-
-def count_positive(values: List[float]) -> int:
-    return sum(1 for value in values if value > 0)
-
-
-def trend_slope(values: List[float]) -> float:
-    clean = [float(v) for v in values if pd.notna(v)]
-    if len(clean) < 2:
-        return 0.0
-    x_mean = (len(clean) - 1) / 2
-    y_mean = avg(clean)
-    denominator = sum((i - x_mean) ** 2 for i in range(len(clean)))
-    if denominator == 0:
-        return 0.0
-    return sum((i - x_mean) * (value - y_mean) for i, value in enumerate(clean)) / denominator
-
-
-def coefficient_of_variation(values: List[float]) -> float:
-    clean = [abs(float(v)) for v in values if pd.notna(v)]
-    mean_value = avg(clean)
-    if mean_value <= 1e-9 or len(clean) < 2:
-        return 0.0
-    variance = sum((value - mean_value) ** 2 for value in clean) / len(clean)
-    return math.sqrt(variance) / mean_value
-
-
-def cagr(start_value: float, end_value: float, periods: int) -> float:
-    if start_value <= 0 or end_value <= 0 or periods <= 0:
-        return 0.08
-    return (end_value / start_value) ** (1 / periods) - 1
-
-
-def avg(values: List[float], fallback: float = 0.0) -> float:
-    clean = [float(v) for v in values if pd.notna(v)]
-    return sum(clean) / len(clean) if clean else fallback
-
-
-def clamp(value: float, low: float, high: float) -> float:
-    return max(low, min(high, value))
 
 
 def ensure_output_dir() -> None:
@@ -243,31 +154,6 @@ def build_dcf_input_rows(years: List[int]) -> List[Dict[str, object]]:
                 row[year] = float(year_values.get(year, 0.0))
             rows.append(row)
     return rows
-
-
-def dcf_item_usage(item: str) -> str:
-    usage = {
-        "Revenue": "预测收入与各项比率分母",
-        "Operating Profit": "计算 EBIT",
-        "Financial Expense": "营业利润还原 EBIT",
-        "Profit Before Tax": "估算有效税率",
-        "Income Tax": "估算有效税率",
-        "Parent Net Profit": "校验 CFO 与利润匹配度",
-        "Cash & Short-term Financial Assets": "净债务与权益桥",
-        "Interest-bearing Short-term Debt": "净债务与 WACC 资本结构",
-        "Long-term Interest-bearing Debt": "净债务与 WACC 资本结构",
-        "Core Operating Current Assets": "营运资本占用",
-        "Operating Non-interest-bearing Current Liabilities": "营运资本占用",
-        "Minority Interest": "权益价值调整",
-        "Total Equity": "账面权益与资本结构交叉检查",
-        "Long-term Financial & Equity Investments": "非经营资产加回",
-        "Non-operating Misc. Current Assets": "非经营资产加回",
-        "Operating Cash Flow": "FCF 质量与 DCF 适用性",
-        "Depreciation": "FCFF 加回项",
-        "Amortization": "FCFF 加回项",
-        "Capex": "FCFF 扣减项",
-    }
-    return usage.get(item, "DCF建模输入")
 
 
 def build_readiness_checks(data: Dict[str, object]) -> List[Dict[str, object]]:
@@ -362,6 +248,7 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
     company_label = company_display_name(data_dir, ticker=ticker)
     valuation_date = date.today().isoformat()
     valuation_config = load_valuation_config(data_dir)
+    valuation_config_sources = valuation_config_source_map(data_dir)
 
     revenue = get_series(pl_map, "Revenue", years)
     operating_profit = get_series(pl_map, "Operating Profit", years)
@@ -466,9 +353,12 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         "base_capex_ratio": round(base_capex_ratio, 4),
         "base_nwc_ratio": round(base_nwc_ratio, 4),
         "valuation_config": valuation_config,
+        "valuation_config_sources": valuation_config_sources,
     }
     data["dcf_input_rows"] = build_dcf_input_rows(years)
     data["readiness_checks"] = build_readiness_checks(data)
+    data["assumption_audit_rows"] = build_assumption_audit_rows(data)
+    data["valuation_risk_warnings"] = build_valuation_risk_warnings(data)
     return data
 
 
@@ -888,6 +778,58 @@ def create_assumptions_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["B4"].number_format = "0.00"
     ws["B6"].number_format = "0.0%"
     ws["B7"].number_format = "0.0%"
+
+
+def create_assumption_audit_sheet(wb: Workbook, data: Dict[str, object]) -> None:
+    ws = wb.create_sheet("Assumption_Audit")
+    ws["A1"] = "Valuation Assumption Audit"
+    apply_title_style(ws["A1"])
+    ws.merge_cells("A1:F1")
+
+    headers = ["Category", "Assumption", "Current Value", "Source", "Rationale", "Review Action"]
+    for col_idx, header in enumerate(headers, start=1):
+        cell = ws.cell(row=3, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    for row_idx, row_data in enumerate(data["assumption_audit_rows"], start=4):
+        values = [
+            row_data["category"],
+            row_data["assumption"],
+            row_data["display_value"],
+            row_data["source"],
+            row_data["rationale"],
+            row_data["review_action"],
+        ]
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            if col_idx in {4, 5, 6}:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    risk_start = 6 + len(data["assumption_audit_rows"])
+    ws[f"A{risk_start}"] = "Valuation Risk Warnings"
+    apply_header_style(ws[f"A{risk_start}"])
+    risk_headers = ["Level", "Title", "Detail", "Recommended Action"]
+    for col_idx, header in enumerate(risk_headers, start=1):
+        cell = ws.cell(row=risk_start + 1, column=col_idx, value=header)
+        apply_header_style(cell)
+
+    fills = {
+        "high": PatternFill("solid", fgColor="FCE4D6"),
+        "medium": PatternFill("solid", fgColor="FFF2CC"),
+        "low": PatternFill("solid", fgColor="E2F0D9"),
+    }
+    for row_idx, warning in enumerate(data["valuation_risk_warnings"], start=risk_start + 2):
+        values = [warning["level"], warning["title"], warning["detail"], warning["action"]]
+        for col_idx, value in enumerate(values, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            if col_idx == 1:
+                cell.fill = fills.get(str(value), PatternFill())
+            if col_idx in {2, 3, 4}:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+
+    add_note(ws, "A2", "Use this page to distinguish default assumptions, local overrides, model-derived forecast seeds, and risk flags before relying on the valuation output.")
+    ws.freeze_panes = "A4"
+    set_col_widths(ws, {"A": 16, "B": 30, "C": 28, "D": 32, "E": 50, "F": 54})
 
 
 def create_forecast_sheet(wb: Workbook, data: Dict[str, object]) -> None:
@@ -1793,6 +1735,7 @@ def build_workbook(data: Dict[str, object]) -> Workbook:
     create_readiness_sheet(wb, data)
     create_wacc_build_sheet(wb, data)
     create_assumptions_sheet(wb, data)
+    create_assumption_audit_sheet(wb, data)
     create_forecast_sheet(wb, data)
     create_dcf_sheet(wb, data)
     create_model_checks_sheet(wb, data)
@@ -1840,3 +1783,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -49,6 +49,10 @@ DATA_DIR_MODULES = {
 }
 
 
+def log(message: str = "") -> None:
+    print(message, flush=True)
+
+
 def modules_for_run(has_info: bool) -> list[str]:
     if has_info:
         return PIPELINE_MODULES
@@ -77,7 +81,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def run_module(module_name: str, data_dir: Path | None = None) -> None:
-    print(f"\n[RUN] afda.{module_name}")
+    log(f"\n[RUN] afda.{module_name}")
     command = [sys.executable, "-m", f"afda.{module_name}"]
     if module_name in DATA_DIR_MODULES and data_dir is not None:
         command.extend(["--data-dir", str(data_dir)])
@@ -102,26 +106,26 @@ def main() -> None:
 
     ensure_output_dirs()
 
-    print("Automated Financial Data Analysis for A-shares")
-    print("==============================================")
-    print(f"Ticker detected: {ticker}")
-    print(f"Input directory: {data_dir}")
-    print(f"Output directory: {results_dir}")
-    print("Input files:")
+    log("Automated Financial Data Analysis for A-shares")
+    log("==============================================")
+    log(f"Ticker detected: {ticker}")
+    log(f"Input directory: {data_dir}")
+    log(f"Output directory: {results_dir}")
+    log("Input files:")
     for path in raw_files.values():
-        print(f"  - {path}")
+        log(f"  - {path}")
 
     info_file = find_info_file(data_dir)
     if info_file is None:
-        print("\nInfo.csv not found in the input directory. DCF valuation and HTML dashboard will be skipped.")
+        log("\nInfo.csv not found in the input directory. DCF valuation and HTML dashboard will be skipped.")
     else:
-        print(f"  - {info_file}")
+        log(f"  - {info_file}")
 
     for module_name in modules_for_run(has_info=info_file is not None):
         run_module(module_name, data_dir)
 
-    print("\nPipeline completed successfully.")
-    print(f"Check {results_dir} for CSV, Excel, Markdown and HTML outputs.")
+    log("\nPipeline completed successfully.")
+    log(f"Check {results_dir} for CSV, Excel, Markdown and HTML outputs.")
 
 
 if __name__ == "__main__":

@@ -51,6 +51,16 @@ def _read_json(path: Path) -> dict[str, Any]:
         return json.load(handle)
 
 
+def _flatten_keys(value: Any, prefix: str = "") -> set[str]:
+    if not isinstance(value, dict):
+        return {prefix} if prefix else set()
+    keys: set[str] = set()
+    for key, child in value.items():
+        child_prefix = f"{prefix}.{key}" if prefix else str(key)
+        keys.update(_flatten_keys(child, child_prefix))
+    return keys
+
+
 def load_valuation_config(data_dir: Path | str | None = None) -> dict[str, Any]:
     """Load project defaults, then optionally override with data-dir config."""
 
@@ -64,6 +74,21 @@ def load_valuation_config(data_dir: Path | str | None = None) -> dict[str, Any]:
             config = _deep_update(config, _read_json(local_path))
 
     return config
+
+
+def valuation_config_source_map(data_dir: Path | str | None = None) -> dict[str, str]:
+    """Return where each valuation config leaf came from."""
+
+    sources = {key: "builtin defaults" for key in _flatten_keys(DEFAULT_CONFIG)}
+    if DEFAULT_CONFIG_PATH.exists():
+        sources.update({key: f"project default: {DEFAULT_CONFIG_PATH.name}" for key in _flatten_keys(_read_json(DEFAULT_CONFIG_PATH))})
+
+    if data_dir is not None:
+        local_path = Path(data_dir) / "valuation_config.json"
+        if local_path.exists():
+            sources.update({key: f"local override: {local_path.name}" for key in _flatten_keys(_read_json(local_path))})
+
+    return sources
 
 
 def get_multiple(config: dict[str, Any], name: str) -> dict[str, float]:

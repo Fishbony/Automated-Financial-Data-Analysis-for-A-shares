@@ -63,6 +63,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from afda.excel_utils import apply_bilingual_fonts
 from afda.pipeline_utils import BS_REBUILT_DIR, CSV_DIR
+from afda.statement_mapping import describe_source_matches, resolve_item_name, sum_source_items
 
 
 OUTPUT_DIR = str(BS_REBUILT_DIR)
@@ -90,10 +91,7 @@ def to_numeric_frame(df: pd.DataFrame, year_cols: List[str]) -> pd.DataFrame:
 
 
 def safe_row_sum(df: pd.DataFrame, item_col: str, year_cols: List[str], item_name: str) -> pd.Series:
-    mask = df[item_col] == item_name
-    if not mask.any():
-        return pd.Series([0.0] * len(year_cols), index=year_cols)
-    return df.loc[mask, year_cols].sum()
+    return sum_source_items(df, item_col, year_cols, [item_name])
 
 
 def load_bs_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
@@ -415,27 +413,32 @@ def build_mapping_rules() -> List[Dict]:
 
 def build_mapping_detail(pre_df: pd.DataFrame, item_col: str, rules: List[Dict]) -> pd.DataFrame:
     rows = []
-    existing_items = set(pre_df[item_col].tolist())
+    existing_items = pre_df[item_col].tolist()
     for rule in rules:
         if rule.get("residual_target"):
+            matched = resolve_item_name(existing_items, rule["residual_target"])
             rows.append(
                 {
                     "原始科目": rule["residual_target"],
+                    "匹配科目": matched or "",
                     "标准科目": rule["standard_item"],
                     "分类": f'{rule["statement_side"]} / {rule["bucket"]} / {rule["classification"]}',
                     "是否合并": "剩余调节",
-                    "是否在原始表中存在": "是" if rule["residual_target"] in existing_items else "否",
+                    "是否在原始表中存在": "是" if matched else "否",
+                    "匹配方式": "exact" if matched == rule["residual_target"] else "alias" if matched else "missing",
                 }
             )
             continue
-        for src in rule["source_items"]:
+        for match in describe_source_matches(existing_items, rule["source_items"]):
             rows.append(
                 {
-                    "原始科目": src,
+                    "原始科目": match["requested_item"],
+                    "匹配科目": match["matched_item"],
                     "标准科目": rule["standard_item"],
                     "分类": f'{rule["statement_side"]} / {rule["bucket"]} / {rule["classification"]}',
                     "是否合并": "是" if len(rule["source_items"]) > 1 else "否",
-                    "是否在原始表中存在": "是" if src in existing_items else "否",
+                    "是否在原始表中存在": "是" if match["exists"] else "否",
+                    "匹配方式": match["match_type"],
                 }
             )
     return pd.DataFrame(rows)

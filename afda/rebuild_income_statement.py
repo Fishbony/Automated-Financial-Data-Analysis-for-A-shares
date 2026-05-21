@@ -59,6 +59,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from afda.excel_utils import apply_bilingual_fonts
 from afda.pipeline_utils import CSV_DIR, PL_REBUILT_DIR
+from afda.statement_mapping import describe_source_matches, sum_source_items
 
 
 OUTPUT_DIR = str(PL_REBUILT_DIR)
@@ -82,10 +83,7 @@ def to_numeric_frame(df: pd.DataFrame, year_cols: List[str]) -> pd.DataFrame:
 
 
 def safe_row_sum(df: pd.DataFrame, item_col: str, year_cols: List[str], item_names: List[str]) -> pd.Series:
-    mask = df[item_col].isin(item_names)
-    if not mask.any():
-        return pd.Series([0.0] * len(year_cols), index=year_cols)
-    return df.loc[mask, year_cols].sum()
+    return sum_source_items(df, item_col, year_cols, item_names)
 
 
 def load_pl_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
@@ -341,16 +339,18 @@ def build_mapping_rules() -> List[Dict]:
 
 def build_mapping_detail(df: pd.DataFrame, item_col: str, rules: List[Dict]) -> pd.DataFrame:
     rows = []
-    available = set(df[item_col].tolist())
+    available = df[item_col].tolist()
     for rule in rules:
-        for source in rule["source_items"]:
+        for match in describe_source_matches(available, rule["source_items"]):
             rows.append(
                 {
-                    "Source Item": source,
+                    "Source Item": match["requested_item"],
+                    "Matched Source Item": match["matched_item"],
                     "Standard Item": rule["standard_item"],
                     "Section": rule["statement_section"],
                     "Bucket": rule["bucket"],
-                    "Exists in Source": source in available,
+                    "Exists in Source": match["exists"],
+                    "Match Type": match["match_type"],
                 }
             )
     return pd.DataFrame(rows)

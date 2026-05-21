@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from afda.input_validation import validate_input_folder
+from afda.pipeline_utils import company_display_name
 
 
 def _touch(path: Path) -> None:
@@ -18,7 +19,7 @@ class InputValidationTests(unittest.TestCase):
             _touch(data_dir / f"{ticker}_benefit_year.xls")
             _touch(data_dir / f"{ticker}_cash_year.xls")
             (data_dir / "Info.csv").write_text(
-                "项目,值\n公司简称,测试公司\n总股本,100000000\n当前股价,12.34\n",
+                "项目,值\n公司名称,测试公司\n公司代码,600406\n总股本,100000000\n当前股价,12.34\n",
                 encoding="utf-8",
             )
 
@@ -27,6 +28,7 @@ class InputValidationTests(unittest.TestCase):
             self.assertTrue(report.ok)
             self.assertEqual(report.ticker, ticker)
             self.assertEqual(report.errors, [])
+            self.assertEqual(company_display_name(data_dir, ticker=ticker), "测试公司（600406）")
 
     def test_validate_input_folder_rejects_bad_info_number(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

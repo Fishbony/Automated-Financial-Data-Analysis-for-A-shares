@@ -151,23 +151,7 @@ def cagr(series: pd.Series) -> float | None:
 
 def build_company_label(data_dir: Path) -> str:
     fallback_name = data_dir.resolve().name or "unknown-company"
-    info_path = pu.find_info_file(data_dir)
-    if info_path is None:
-        return fallback_name
-    try:
-        info = pd.read_csv(info_path, dtype=str)
-        if "项目" not in info.columns:
-            return fallback_name
-        value_col = info.columns[-1]
-        for key in ["公司简称", "公司名称"]:
-            match = info.loc[info["项目"].astype(str).str.strip() == key, value_col]
-            if not match.empty:
-                value = str(match.iloc[0]).strip()
-                if value and value.lower() != "nan":
-                    return value
-    except Exception:
-        pass
-    return fallback_name
+    return pu.company_display_name(data_dir, fallback=fallback_name)
 
 
 def build_context(data_dir: Path) -> str:

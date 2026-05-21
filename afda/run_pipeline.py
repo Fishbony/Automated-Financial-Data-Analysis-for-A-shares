@@ -49,6 +49,16 @@ DATA_DIR_MODULES = {
 }
 
 
+def modules_for_run(has_info: bool) -> list[str]:
+    if has_info:
+        return PIPELINE_MODULES
+    return [
+        module_name
+        for module_name in PIPELINE_MODULES
+        if module_name not in {"generate_dcf_valuation", "generate_html_report"}
+    ]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the A-share financial analysis pipeline.")
     parser.add_argument(
@@ -107,9 +117,7 @@ def main() -> None:
     else:
         print(f"  - {info_file}")
 
-    for module_name in PIPELINE_MODULES:
-        if module_name in {"generate_dcf_valuation", "generate_html_report"} and info_file is None:
-            continue
+    for module_name in modules_for_run(has_info=info_file is not None):
         run_module(module_name, data_dir)
 
     print("\nPipeline completed successfully.")

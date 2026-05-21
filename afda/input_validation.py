@@ -14,8 +14,9 @@ REQUIRED_INFO_ITEMS = {
     "当前股价": "current share price used for upside/downside",
 }
 
+RECOMMENDED_COMPANY_NAME_ITEMS = ("公司名称", "公司简称")
 RECOMMENDED_INFO_ITEMS = {
-    "公司简称": "display name in Excel and HTML reports",
+    "公司代码": "display code used with company name in Excel, Markdown, and HTML reports",
 }
 
 
@@ -104,6 +105,9 @@ def validate_info_file(info_path: Path, report: ValidationReport) -> None:
 
     for item in REQUIRED_INFO_ITEMS:
         _validate_numeric_item(info_df, item, report)
+
+    if not any(_find_info_value(info_df, item) is not None for item in RECOMMENDED_COMPANY_NAME_ITEMS):
+        report.add_warning("Info.csv is missing recommended item 公司名称 or 公司简称: display name in reports.")
 
     for item, reason in RECOMMENDED_INFO_ITEMS.items():
         if _find_info_value(info_df, item) is None:

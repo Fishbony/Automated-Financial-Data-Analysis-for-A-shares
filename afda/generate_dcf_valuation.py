@@ -64,6 +64,8 @@ from afda.pipeline_utils import (
     VALUATION_DIR,
     detect_ticker,
     find_info_file,
+    company_display_name,
+    read_info_items,
     prompt_data_dir_with_dialog,
     resolve_data_dir,
 )
@@ -211,13 +213,11 @@ def detect_company_name(ticker: str, info_path: Optional[Path] = None) -> str:
     info_path = info_path or INFO_PATH
     if info_path.exists():
         try:
-            info_df = pd.read_csv(info_path, dtype=str)
-            for key in ["公司简称", "公司名称"]:
-                match = info_df.loc[info_df["项目"] == key, info_df.columns[-1]]
-                if not match.empty:
-                    value = str(match.iloc[0]).strip()
-                    if value and value.lower() != "nan":
-                        return value
+            info = read_info_items(info_path)
+            for key in ["公司名称", "公司简称"]:
+                value = info.get(key)
+                if value:
+                    return value
         except Exception:
             pass
     return ticker
@@ -348,7 +348,7 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
     bs = pd.read_csv(BS_PATH)
     pl = pd.read_csv(PL_PATH)
     cf = pd.read_csv(CF_PATH)
-    info = pd.read_csv(info_path)
+    info_items = read_info_items(info_path)
 
     bs_map = load_item_series(bs, "StandardLineItem", "Year", "Value")
     pl_map = load_item_series(pl, "Standard Item", "Year", "Value")
@@ -358,6 +358,8 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
     years = [int(y) for y in years]
     ticker = detect_ticker(data_dir)
     company_name = detect_company_name(ticker, info_path)
+    company_code = info_items.get("公司代码", ticker)
+    company_label = company_display_name(data_dir, ticker=ticker)
     valuation_date = date.today().isoformat()
     valuation_config = load_valuation_config(data_dir)
 
@@ -400,8 +402,8 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         capex_ratio.append(capex[idx] / rev if abs(rev) > 1e-9 else 0.03)
         nwc_ratio.append(nwc[idx] / rev if abs(rev) > 1e-9 else 0.05)
 
-    shares_outstanding = float(info.loc[info["项目"] == "总股本", info.columns[-1]].iloc[0])
-    current_price = float(info.loc[info["项目"] == "当前股价", info.columns[-1]].iloc[0])
+    shares_outstanding = float(info_items["总股本"].replace(",", ""))
+    current_price = float(info_items["当前股价"].replace(",", ""))
 
     base_year = max(years)
     growth_seed = cagr(revenue[-4], revenue[-1], 3) if len(revenue) >= 4 else 0.10
@@ -454,7 +456,9 @@ def build_historical_dataset(data_dir: Optional[Path] = None, info_path: Optiona
         "current_price": current_price,
         "default_growths": default_growths,
         "ticker": ticker,
+        "company_code": company_code,
         "company_name": company_name,
+        "company_label": company_label,
         "valuation_date": valuation_date,
         "base_ebit_margin": round(base_ebit_margin, 4),
         "base_tax_rate": round(base_tax_rate, 4),
@@ -535,7 +539,7 @@ def create_summary_sheet(wb: Workbook, data: Dict[str, object]) -> None:
     ws["A1"] = "估值总览"
     apply_title_style(ws["A1"])
     ws.merge_cells("A1:J1")
-    ws["A2"] = f"Ticker: {data['ticker']}    公司简称: {data['company_name']}    估值日期: {data['valuation_date']}"
+    ws["A2"] = f"公司: {data.get('company_label', data['company_name'])}    Ticker: {data['ticker']}    估值日期: {data['valuation_date']}"
     ws["A2"].font = Font(italic=True, color="666666")
     ws.merge_cells("A2:J2")
 

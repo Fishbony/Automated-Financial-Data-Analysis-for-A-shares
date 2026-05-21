@@ -30,6 +30,7 @@ CSV_DIR     results/csv/ 目录 Path 对象
 from __future__ import annotations
 
 import os
+import csv
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -148,6 +149,58 @@ def find_info_file(raw_dir: Path = RAW_DIR) -> Optional[Path]:
         if path.is_file() and path.name.lower() == "info.csv":
             return path
     return None
+
+
+def read_info_items(info_path: Path) -> Dict[str, str]:
+    """Read Info.csv into a stripped key/value mapping.
+
+    Expected format:
+        项目,值
+        公司名称,海大集团
+        公司代码,002311
+    """
+
+    last_error: Exception | None = None
+    for encoding in ("utf-8-sig", "gbk"):
+        try:
+            with info_path.open("r", encoding=encoding, newline="") as handle:
+                reader = csv.DictReader(handle)
+                if not reader.fieldnames or "项目" not in reader.fieldnames:
+                    return {}
+                value_col = reader.fieldnames[-1]
+                items: Dict[str, str] = {}
+                for row in reader:
+                    key = str(row.get("项目", "")).strip()
+                    value = str(row.get(value_col, "")).strip()
+                    if key and value and value.lower() != "nan":
+                        items[key] = value
+                return items
+        except UnicodeDecodeError as exc:
+            last_error = exc
+            continue
+    if last_error is not None:
+        raise last_error
+    return {}
+
+
+def company_display_name(data_dir: Path, ticker: Optional[str] = None, fallback: Optional[str] = None) -> str:
+    """Return 公司名称（公司代码） when Info.csv provides both fields."""
+
+    fallback_name = fallback or ticker or data_dir.resolve().name or "unknown-company"
+    info_path = find_info_file(data_dir)
+    if info_path is None:
+        return fallback_name
+
+    try:
+        info = read_info_items(info_path)
+    except Exception:
+        return fallback_name
+
+    name = info.get("公司名称") or info.get("公司简称") or fallback_name
+    code = info.get("公司代码") or ticker
+    if code and code not in name:
+        return f"{name}（{code}）"
+    return name
 
 
 def detect_ticker(raw_dir: Path = RAW_DIR) -> str:

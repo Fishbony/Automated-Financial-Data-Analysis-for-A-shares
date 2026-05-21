@@ -482,7 +482,13 @@ def build_html(
     }
 
     payload = {
-        "company": {"ticker": data["ticker"], "name": data["company_name"], "valuationDate": data["valuation_date"]},
+        "company": {
+            "ticker": data["ticker"],
+            "code": data.get("company_code", data["ticker"]),
+            "name": data["company_name"],
+            "label": data.get("company_label", data["company_name"]),
+            "valuationDate": data["valuation_date"],
+        },
         "historical": {
             "years": years,
             "revenue": revenue,
@@ -521,7 +527,7 @@ def build_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{esc(data['company_name'])} 财务与DCF估值</title>
+  <title>{esc(data.get('company_label', data['company_name']))} 财务与DCF估值</title>
   <script src="{esc(echarts_src)}"></script>
   <style>
     :root {{
@@ -615,7 +621,7 @@ def build_html(
   <header>
     <div class="wrap topline">
       <div>
-        <h1>{esc(data['company_name'])} ({esc(data['ticker'])}) 财务与 DCF 估值</h1>
+        <h1>{esc(data.get('company_label', data['company_name']))} 财务与 DCF 估值</h1>
         <div class="subtitle">估值日期：{esc(data['valuation_date'])} · 生成时间：{esc(generated_at)} · 离线 HTML</div>
       </div>
       <div id="headerBadge" class="badge {initial_badge}">目标价 <span id="headerPrice">{dcf['intrinsic_price']:.2f}</span> · <span id="headerUpside">{percent(dcf['upside'])}</span></div>
@@ -1158,16 +1164,26 @@ def build_html(
       }}).join('');
     }}
 
+    function formatAxisTooltip(params, formatter) {{
+      const rows = Array.isArray(params) ? params : [params];
+      const title = rows[0]?.axisValueLabel || rows[0]?.name || '';
+      const body = rows.map(item => {{
+        const value = Array.isArray(item.value) ? item.value[item.value.length - 1] : item.value;
+        return `${{item.marker || ''}}${{item.seriesName}}: ${{value === null || value === undefined ? '数据不足' : formatter(value)}}`;
+      }}).join('<br>');
+      return `${{title}}<br>${{body}}`;
+    }}
+
     function metricChart(id, titleYears, series, mode = 'money') {{
       const isRate = mode === 'rate';
       const formatter = value => (isRate || mode === 'ratio') ? percent(value) : money(value);
       initChart(id, {{
         color: ['#2563eb', '#0f766e', '#f97316', '#7c3aed', '#b91c1c', '#64748b'],
-        tooltip: {{ trigger: 'axis', valueFormatter: formatter }},
+        tooltip: {{ trigger: 'axis', formatter: params => formatAxisTooltip(params, formatter) }},
         legend: {{ top: 0, type: 'scroll', textStyle: {{ color: '#687385' }} }},
         grid: {{ left: 76, right: 30, top: 48, bottom: 42 }},
         xAxis: {{ type: 'category', data: titleYears, axisLabel: {{ color: '#687385' }} }},
-        yAxis: {{ type: 'value', axisLabel: {{ color: '#687385', formatter }}, splitLine: {{ lineStyle: {{ color: '#e8edf5' }} }} }},
+        yAxis: {{ type: 'value', name: isRate ? '%' : '', axisLabel: {{ color: '#687385', formatter: value => formatter(value) }}, splitLine: {{ lineStyle: {{ color: '#e8edf5' }} }} }},
         series: series.map(s => ({{ ...s, smooth: s.type !== 'bar', symbolSize: 6, barMaxWidth: 36 }}))
       }});
     }}

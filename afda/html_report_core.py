@@ -338,7 +338,7 @@ def load_statement_tables(results_dir: Path) -> Dict[str, Dict[str, object]]:
 
 
 def table(headers: Iterable[str], rows: Iterable[Iterable[str]]) -> str:
-    head = "".join(f"<th>{esc(h)}</th>" for h in headers)
+    head = "".join(f'<th data-col="{i}" class="sortable">{esc(h)}</th>' for i, h in enumerate(headers))
     body = ""
     for row in rows:
         if isinstance(row, dict):
@@ -353,6 +353,7 @@ def table(headers: Iterable[str], rows: Iterable[Iterable[str]]) -> str:
 
 def statement_section(statement: Dict[str, object]) -> str:
     charts = "".join(chart_container(chart["id"], chart["title"]) for chart in statement["charts"])
+    table_id = f"{statement.get('csvPath', 'statement').split('/')[-1].replace('.csv', '')}_table"
     return f"""
       <section>
         <h2>{esc(statement["title"])}可视化</h2>
@@ -362,7 +363,11 @@ def statement_section(statement: Dict[str, object]) -> str:
       </section>
       <section>
         <h2>{esc(statement["title"])}</h2>
-        <div class="statement-table">
+        <div class="table-toolbar">
+          <input type="text" class="table-search" data-target="{table_id}" placeholder="搜索科目名称…">
+          <button class="action-btn table-export" data-target="{table_id}">导出 CSV</button>
+        </div>
+        <div class="statement-table" id="{table_id}" data-statement="{esc(statement.get('csvPath', ''))}">
           {table(statement["headers"], statement["rows"])}
         </div>
       </section>

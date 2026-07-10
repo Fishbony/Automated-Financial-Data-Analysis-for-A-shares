@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-from afda.dcf_core import build_valuation_risk_warnings
 from afda.html_report_core import (
     OUTPUT_FILE_NAME,
     build_assumption_inputs,
@@ -121,8 +120,6 @@ def build_html(
         },
         "forecastYears": forecast_years,
         "assumptions": assumptions,
-        "assumptionAudit": data.get("assumption_audit_rows", []),
-        "valuationRiskWarnings": build_valuation_risk_warnings(data, assumptions),
         "initialDcf": dcf,
         "statements": statement_payload,
     }
@@ -130,13 +127,14 @@ def build_html(
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
     initial_badge = "good" if dcf["upside"] >= 0.15 else "neutral" if dcf["upside"] >= -0.10 else "risk"
 
+    rev_yoy = (revenue[-1] - revenue[-2]) / abs(revenue[-2]) if len(revenue) >= 2 and revenue[-2] != 0 else 0
     cards = [
-        ("当前股价", f"{assumptions['current_price']:.2f}", "来自 Info.csv / Assumptions"),
-        ("DCF 每股内在价值", f"{dcf['intrinsic_price']:.2f}", f"安全边际 {percent(dcf['safety_margin'])}"),
-        ("企业价值 EV", money(dcf["enterprise_value"]), "5年 FCFF + Terminal Value"),
-        (f"{years[-1]}A 营收", money(revenue[-1]), f"EBIT Margin {percent(ebit_margin[-1])}"),
-        (f"{years[-1]}A 经营现金流", money(cfo[-1]), f"FCFF Proxy {money(fcff[-1])}"),
-        ("股东权益价值", money(dcf["equity_value"]), "EV 到 Equity Bridge"),
+        (f"{years[-1]}A 营收", money(revenue[-1]), f"YoY {percent(rev_yoy)}"),
+        (f"{years[-1]}A EBIT", money(ebit[-1]), f"EBIT Margin {percent(ebit_margin[-1])}"),
+        (f"{years[-1]}A 归母净利润", money(net_profit[-1]), f"EBIT Margin {percent(ebit_margin[-1])}"),
+        (f"{years[-1]}A 经营现金流", money(cfo[-1]), "Operating Cash Flow"),
+        (f"{years[-1]}A FCFF Proxy", money(fcff[-1]), "Free Cash Flow to Firm"),
+        (f"{years[-1]}A EBIT Margin", percent(ebit_margin[-1]), "经营利润率"),
     ]
     card_html = "".join(
         f'<article class="metric-card"><span>{esc(label)}</span><strong>{esc(value)}</strong><small>{esc(note)}</small></article>'
@@ -212,7 +210,7 @@ def build_html(
     .risk-list li {{ padding:11px 12px; border:1px solid var(--line); border-left:4px solid #f97316; border-radius:8px; background:#fff; }}
     .risk-list li.good {{ border-left-color:#10b981; }}
     .analysis-table {{ overflow:auto; border:1px solid var(--line); border-radius:8px; }}
-    #valuation {{ display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:12px; align-items:start; }}
+    #valuation.active {{ display:grid; grid-template-columns:minmax(0,1fr) 260px; gap:12px; align-items:start; }}
     #valuation section {{ margin-top:16px; }}
     #valuation section:nth-of-type(1) {{ grid-column:1; grid-row:1; }}
     #valuation section:nth-of-type(2) {{ grid-column:2; grid-row:1; padding:14px; }}
@@ -234,11 +232,94 @@ def build_html(
     .toolbar {{ display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; }}
     .action-btn {{ border:1px solid var(--line); background:#fff; border-radius:8px; padding:9px 12px; cursor:pointer; font-weight:700; }}
     .action-btn.primary {{ background:var(--accent); color:#fff; border-color:var(--accent); }}
-    @media(max-width:1100px) {{ #valuation {{ display:block; }} }}
+    .action-btn:hover {{ filter:brightness(1.05); box-shadow:0 2px 8px rgba(0,0,0,.1); }}
+    .action-btn:active {{ transform:translateY(1px); }}
+
+    /* Theme toggle */
+    .theme-toggle {{ position:fixed; top:16px; right:16px; z-index:999; background:var(--panel); border:1px solid var(--line); border-radius:50%; width:40px; height:40px; cursor:pointer; font-size:18px; display:flex; align-items:center; justify-content:center; box-shadow:var(--shadow); transition:all .2s; }}
+    .theme-toggle:hover {{ transform:scale(1.1); }}
+    body.dark-theme {{ --bg:#0f172a; --panel:#1e293b; --ink:#e2e8f0; --muted:#94a3b8; --line:#334155; --shadow:0 18px 44px rgba(0,0,0,.3); }}
+    body.dark-theme header {{ background:#020617; }}
+    body.dark-theme th {{ background:#334155; color:#cbd5e1; }}
+    body.dark-theme .statement-table th:first-child, body.dark-theme .statement-table td:first-child {{ background:var(--panel); }}
+    body.dark-theme .statement-table th:first-child {{ background:#334155; }}
+    body.dark-theme .statement-table tr.emphasis-row td {{ background:#1e3a5f; color:#e2e8f0; }}
+    body.dark-theme .statement-table tr.emphasis-row td:first-child {{ background:#1e3a5f; }}
+    body.dark-theme input {{ background:#0f172a; color:var(--ink); border-color:#475569; }}
+    body.dark-theme .analysis-hero {{ background:#020617; border-color:#020617; }}
+    body.dark-theme .analysis-text {{ background:#0f172a; color:#cbd5e1; border-color:#334155; }}
+    body.dark-theme .risk-list li {{ background:var(--panel); }}
+    body.dark-theme .tab-btn {{ background:var(--panel); color:var(--ink); border-color:var(--line); }}
+    body.dark-theme .tab-btn.active {{ background:#e2e8f0; color:#0f172a; border-color:#e2e8f0; }}
+
+    /* Interactive table */
+    .table-toolbar {{ display:flex; gap:10px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }}
+    .table-search {{ flex:1; min-width:200px; max-width:400px; padding:8px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:14px; background:var(--panel); color:var(--ink); }}
+    .table-search:focus {{ outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(37,99,235,.15); }}
+    th.sortable {{ cursor:pointer; user-select:none; position:relative; padding-right:22px; }}
+    th.sortable:hover {{ background:#e0e7ff; }}
+    body.dark-theme th.sortable:hover {{ background:#3b4d6b; }}
+    th.sortable::after {{ content:'⇅'; position:absolute; right:6px; opacity:.3; font-size:12px; }}
+    th.sortable.sort-asc::after {{ content:'↑'; opacity:1; color:var(--accent); }}
+    th.sortable.sort-desc::after {{ content:'↓'; opacity:1; color:var(--accent); }}
+    tr.filtered-out {{ display:none; }}
+
+    /* Scenario presets */
+    .scenario-bar {{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; align-items:center; }}
+    .scenario-btn {{ border:2px solid var(--line); background:var(--panel); border-radius:10px; padding:10px 18px; cursor:pointer; font-weight:700; font-size:14px; transition:all .2s; }}
+    .scenario-btn:hover {{ transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.1); }}
+    .scenario-btn.bull {{ border-color:#10b981; color:#10b981; }}
+    .scenario-btn.bull.active {{ background:#10b981; color:#fff; }}
+    .scenario-btn.base {{ border-color:var(--accent); color:var(--accent); }}
+    .scenario-btn.base.active {{ background:var(--accent); color:#fff; }}
+    .scenario-btn.bear {{ border-color:#b91c1c; color:#b91c1c; }}
+    .scenario-btn.bear.active {{ background:#b91c1c; color:#fff; }}
+    .scenario-label {{ font-size:14px; color:var(--muted); margin-right:8px; }}
+
+    /* Sensitivity heatmap */
+    .sensitivity-container {{ overflow:auto; border:1px solid var(--line); border-radius:8px; padding:16px; }}
+    .sensitivity-table {{ border-collapse:separate; border-spacing:3px; font-size:13px; margin:0 auto; }}
+    .sensitivity-table th {{ background:transparent; border:none; color:var(--muted); font-weight:600; padding:4px 8px; text-align:center; }}
+    .sensitivity-table td {{ text-align:center; padding:8px 10px; border-radius:4px; font-weight:600; cursor:pointer; transition:transform .15s; }}
+    .sensitivity-table td:hover {{ transform:scale(1.08); z-index:1; position:relative; }}
+    .sensitivity-table .axis-label {{ font-weight:700; color:var(--ink); background:var(--bg); }}
+    .sensitivity-legend {{ display:flex; align-items:center; gap:12px; justify-content:center; margin-top:14px; font-size:13px; color:var(--muted); }}
+    .sensitivity-gradient {{ width:200px; height:14px; border-radius:7px; background:linear-gradient(to right,#b91c1c,#fde68a,#10b981); }}
+
+    /* Fullscreen modal */
+    .chart-modal {{ display:none; position:fixed; inset:0; z-index:1000; background:rgba(0,0,0,.75); backdrop-filter:blur(4px); align-items:center; justify-content:center; padding:40px; }}
+    .chart-modal.active {{ display:flex; }}
+    .chart-modal-content {{ background:var(--panel); border-radius:12px; padding:24px; width:100%; max-width:1100px; height:80vh; position:relative; }}
+    .chart-modal-close {{ position:absolute; top:12px; right:16px; font-size:28px; cursor:pointer; color:var(--muted); border:none; background:none; line-height:1; }}
+    .chart-modal-close:hover {{ color:var(--ink); }}
+    .chart-modal-body {{ width:100%; height:calc(100% - 40px); }}
+    .chart-card {{ position:relative; }}
+    .chart-fullscreen-btn {{ position:absolute; top:8px; right:8px; z-index:5; background:rgba(255,255,255,.8); border:1px solid var(--line); border-radius:6px; width:28px; height:28px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; opacity:0; transition:opacity .2s; }}
+    .chart-card:hover .chart-fullscreen-btn {{ opacity:1; }}
+    body.dark-theme .chart-fullscreen-btn {{ background:rgba(30,41,59,.8); color:var(--ink); }}
+
+    /* Back to top */
+    .back-to-top {{ position:fixed; bottom:24px; right:24px; z-index:999; width:44px; height:44px; border-radius:50%; background:var(--accent); color:#fff; border:none; cursor:pointer; font-size:20px; display:none; align-items:center; justify-content:center; box-shadow:0 4px 16px rgba(37,99,235,.4); transition:all .2s; }}
+    .back-to-top.visible {{ display:flex; }}
+    .back-to-top:hover {{ transform:translateY(-3px); }}
+
+    /* Toast */
+    .toast-container {{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:2000; }}
+    .toast {{ background:#0f172a; color:#fff; border-radius:8px; padding:12px 20px; margin-top:8px; font-size:14px; box-shadow:0 8px 24px rgba(0,0,0,.2); opacity:0; transform:translateY(20px); transition:all .3s; }}
+    .toast.show {{ opacity:1; transform:translateY(0); }}
+    .toast.success {{ background:#065f46; }}
+    .toast.error {{ background:#991b1b; }}
+
+    /* Tab transition */
+    .tab-pane {{ animation:fadeIn .3s ease; }}
+    @keyframes fadeIn {{ from {{ opacity:0; transform:translateY(8px); }} to {{ opacity:1; transform:translateY(0); }} }}
+
+    @media(max-width:1100px) {{ #valuation.active {{ display:block; }} }}
     @media(max-width:900px) {{ .metrics,.two,.charts,.three,.input-grid,.analysis-cards {{ grid-template-columns:1fr; }} section {{ overflow-x:auto; }} }}
   </style>
 </head>
 <body>
+  <button class="theme-toggle" id="themeToggle" title="切换深色/浅色主题">&#127769;</button>
   <header>
     <div class="wrap topline">
       <div>
@@ -333,10 +414,6 @@ def build_html(
         <h2>财务风险提示</h2>
         <ul id="riskWarnings" class="risk-list"></ul>
       </section>
-      <section>
-        <h2>初步估值输入指标</h2>
-        <div id="valuationInputTable" class="analysis-table"></div>
-      </section>
     </div>
 
     <div id="balanceSheet" class="tab-pane wrap">
@@ -354,6 +431,12 @@ def build_html(
     <div id="valuation" class="tab-pane wrap">
       <section>
         <h2>可编辑 Assumptions</h2>
+        <div class="scenario-bar">
+          <span class="scenario-label">情景预设：</span>
+          <button class="scenario-btn bull" data-scenario="bull">乐观</button>
+          <button class="scenario-btn base active" data-scenario="base">基准</button>
+          <button class="scenario-btn bear" data-scenario="bear">悲观</button>
+        </div>
         <div class="input-grid">
           <label class="input-card"><span>当前股价</span><input id="currentPrice" type="number" step="0.01" value="{float(assumptions['current_price']):.4f}"></label>
           <label class="input-card"><span>总股本</span><input id="sharesOutstanding" type="number" step="1" value="{float(assumptions['shares_outstanding']):.4f}"></label>
@@ -373,16 +456,6 @@ def build_html(
       </section>
 
       <section>
-      <section>
-        <h2>Assumption Audit</h2>
-        <div id="assumptionAuditTable" class="analysis-table"></div>
-      </section>
-
-      <section>
-        <h2>Valuation Risk Warnings</h2>
-        <ul id="valuationRiskWarnings" class="risk-list"></ul>
-      </section>
-
         <h2>估值结论</h2>
         <div class="grid three">
           <div><span class="note">DCF 每股内在价值</span><div id="valuationPrice" class="kpi-large"></div></div>
@@ -410,8 +483,31 @@ def build_html(
           <tbody id="forecastBody"></tbody>
         </table>
       </section>
+
+      <section>
+        <h2>敏感性分析 — WACC × 永续增长率 → 每股内在价值</h2>
+        <div class="note">修改上方假设后，下表自动重算。点击任一单元格可将该组合应用至假设。</div>
+        <div class="sensitivity-container">
+          <div id="sensitivityGrid"></div>
+          <div class="sensitivity-legend">
+            <span>低估值</span>
+            <div class="sensitivity-gradient"></div>
+            <span>高估值</span>
+          </div>
+        </div>
+      </section>
     </div>
   </main>
+
+  <div class="chart-modal" id="chartModal">
+    <div class="chart-modal-content">
+      <button class="chart-modal-close" id="chartModalClose">×</button>
+      <div class="chart-modal-body" id="chartModalBody"></div>
+    </div>
+  </div>
+
+  <button class="back-to-top" id="backToTop" title="回到顶部">↑</button>
+  <div class="toast-container" id="toastContainer"></div>
 
   <script>
     const model = {payload_json};
@@ -484,12 +580,54 @@ def build_html(
       return {{ rows, pvFcff, pvTerminal, terminalValue, enterpriseValue, equityValue, intrinsicPrice, upside, safetyMargin }};
     }}
 
+    function enhanceChartOption(option) {{
+      option.toolbox = {{
+        show: true, right: 8, top: 0, itemSize: 14,
+        feature: {{
+          saveAsImage: {{ title: '保存为图片', pixelRatio: 2, backgroundColor: '#fff' }},
+          dataZoom: {{ yAxisIndex: 'none', title: {{ zoom: '区域缩放', back: '还原' }} }},
+          restore: {{ title: '重置' }},
+          dataView: {{ title: '数据视图', lang: ['数据视图', '关闭', '刷新'], readOnly: true, optionToContent: function(opt) {{
+            const series = opt.series || []; let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr><th>类别</th>';
+            (opt.xAxis?.data || []).forEach(x => html += '<th style="padding:4px 8px;border:1px solid #ddd;">' + x + '</th>');
+            html += '</tr></thead><tbody>';
+            series.forEach(s => {{ html += '<tr><td style="font-weight:700;padding:4px 8px;border:1px solid #ddd;">' + s.name + '</td>';
+              (s.data || []).forEach(v => html += '<td style="text-align:right;padding:4px 8px;border:1px solid #ddd;">' + (v === null || v === undefined ? '—' : money(v)) + '</td>');
+              html += '</tr>'; }});
+            return html + '</tbody></table>';
+          }} }}
+        }}
+      }};
+      option.animation = true;
+      option.animationDuration = 800;
+      option.animationEasing = 'cubicOut';
+      const xData = (option.xAxis && option.xAxis.data) || (Array.isArray(option.xAxis) && option.xAxis[0] && option.xAxis[0].data) || [];
+      if (xData.length > 1) {{
+        option.dataZoom = [
+          {{ type: 'inside', start: 0, end: 100, zoomOnMouseWheel: 'shift' }},
+          {{ type: 'slider', start: 0, end: 100, height: 18, bottom: 4, borderColor: 'transparent', fillerColor: 'rgba(37,99,235,.12)', handleStyle: {{ color: '#2563eb' }} }}
+        ];
+        option.grid = option.grid || {{}};
+        option.grid.bottom = 60;
+      }}
+      if (option.tooltip) {{
+        option.tooltip.confine = true;
+        option.tooltip.backgroundColor = 'rgba(15,23,42,.92)';
+        option.tooltip.borderColor = 'rgba(255,255,255,.1)';
+        option.tooltip.textStyle = {{ color: '#fff', fontSize: 13 }};
+      }}
+      return option;
+    }}
+
+    const chartOptions = {{}};
     function initChart(id, option) {{
       const el = document.getElementById(id);
       if (!el || !window.echarts) return null;
       const chart = chartRefs[id] || echarts.init(el, null, {{ renderer: 'canvas' }});
       chartRefs[id] = chart;
-      chart.setOption(option);
+      enhanceChartOption(option);
+      chartOptions[id] = option;
+      chart.setOption(option, true);
       return chart;
     }}
 
@@ -861,22 +999,6 @@ def build_html(
       document.getElementById('threeStatementAnalysisText').textContent = `三表联动显示，收入、利润、经营现金流、自由现金流与资产负债扩张需要共同观察：若收入增长同时现金流改善且有息负债未明显膨胀，增长质量更高；反之需关注扩张消耗现金和杠杆抬升。`;
     }}
 
-    function renderValuationInputs(ctx) {{
-      const m = ctx.metrics;
-      const rows = [
-        ['最近一期收入', latest(m.revenue), money],
-        ['归母净利润', latest(m.parentNetProfit), money],
-        ['扣非净利润', latest(m.adjustedNetProfit), money],
-        ['经营现金流', latest(m.operatingCashFlow), money],
-        ['自由现金流', latest(m.freeCashFlow), money],
-        ['ROE', latest(m.roe), percent],
-        ['资产负债率', latest(m.debtToAssetRatio), percent],
-        ['有息负债', latest(m.interestBearingDebt), money],
-        ['净债务', latest(m.netDebt), money]
-      ];
-      document.getElementById('valuationInputTable').innerHTML = tableHtml(['指标', '数值'], rows.map(([label, value, fmt]) => [label, value === null || value === undefined ? '数据不足' : fmt(value)]));
-    }}
-
     function tableHtml(headers, rows) {{
       return `<table><thead><tr>${{headers.map(h => `<th>${{h}}</th>`).join('')}}</tr></thead><tbody>${{rows.map(row => `<tr>${{row.map(c => `<td>${{c}}</td>`).join('')}}</tr>`).join('')}}</tbody></table>`;
     }}
@@ -922,7 +1044,6 @@ def build_html(
         renderMetricCards(ctx);
         renderCharts(ctx);
         generateTextAnalysis(ctx);
-        renderValuationInputs(ctx);
         const risks = generateRiskWarnings(ctx);
         document.getElementById('riskWarnings').innerHTML = risks.map((risk, idx) => `<li class="${{idx === 0 && risks.length === 1 && risk.startsWith('暂无') ? 'good' : ''}}">${{risk}}</li>`).join('');
       }} catch (err) {{
@@ -1034,45 +1155,6 @@ def build_html(
       }});
     }}
 
-    function valuationRiskWarnings(assumptions, dcf) {{
-      const risks = [];
-      const spread = assumptions.wacc - assumptions.terminal_growth;
-      if (spread <= 0) {{
-        risks.push({{ level:'high', title:'Terminal growth is not below WACC', detail:'Gordon terminal value is unstable when terminal growth is greater than or equal to WACC.', action:'Lower terminal growth or raise WACC before relying on the valuation.' }});
-      }} else if (spread < 0.02) {{
-        risks.push({{ level:'high', title:'WACC minus terminal growth spread is too thin', detail:`Current spread is ${{percent(spread)}}; valuation is highly sensitive to small assumption changes.`, action:'Use a wider WACC-g buffer and review the sensitivity table first.' }});
-      }} else if (spread < 0.035) {{
-        risks.push({{ level:'medium', title:'WACC minus terminal growth spread is narrow', detail:`Current spread is ${{percent(spread)}}; terminal value sensitivity is elevated.`, action:'Benchmark terminal growth against mature industry economics.' }});
-      }}
-      if (assumptions.terminal_growth > 0.04) risks.push({{ level:'medium', title:'Terminal growth is above a conservative mature-company range', detail:`Terminal growth is ${{percent(assumptions.terminal_growth)}}.`, action:'Compare with long-term inflation, nominal GDP, and industry maturity.' }});
-      if (assumptions.wacc < 0.07) risks.push({{ level:'medium', title:'WACC appears low', detail:`WACC is ${{percent(assumptions.wacc)}}.`, action:'Recheck beta, equity risk premium, cost of debt, and leverage.' }});
-      const pvTerminalShare = dcf.enterpriseValue ? dcf.pvTerminal / dcf.enterpriseValue : 0;
-      if (pvTerminalShare > 0.75) risks.push({{ level:'high', title:'Terminal value dominates enterprise value', detail:`PV terminal value is ${{percent(pvTerminalShare)}} of EV.`, action:'Extend the explicit forecast, lower terminal growth, or stress-test WACC.' }});
-      else if (pvTerminalShare > 0.65) risks.push({{ level:'medium', title:'Terminal value is a large share of EV', detail:`PV terminal value is ${{percent(pvTerminalShare)}} of EV.`, action:'Treat the target price as especially sensitive to long-term assumptions.' }});
-      return risks.length ? risks : model.valuationRiskWarnings;
-    }}
-
-    function renderAssumptionAudit() {{
-      const rows = (model.assumptionAudit || []).map(row => [
-        row.category || '',
-        row.assumption || '',
-        row.display_value || '',
-        row.source || '',
-        row.review_action || ''
-      ]);
-      document.getElementById('assumptionAuditTable').innerHTML = tableHtml(['Category', 'Assumption', 'Value', 'Source', 'Review Action'], rows);
-    }}
-
-    function renderValuationRisks(assumptions, dcf) {{
-      const risks = valuationRiskWarnings(assumptions, dcf);
-      document.getElementById('valuationRiskWarnings').innerHTML = risks.map(risk => `
-        <li class="${{risk.level === 'low' ? 'good' : ''}}">
-          <strong>${{risk.title}}</strong><br>
-          <span>${{risk.detail}}</span><br>
-          <small>${{risk.action}}</small>
-        </li>`).join('');
-    }}
-
     function renderValuation() {{
       const assumptions = collectAssumptions();
       const dcf = compute(assumptions);
@@ -1106,7 +1188,219 @@ def build_html(
         </tr>`).join('');
 
       initChart('forecastChart', forecastComboChart(model.forecastYears, dcf.rows));
-      renderValuationRisks(assumptions, dcf);
+      renderSensitivityGrid();
+    }}
+
+    // === Toast ===
+    function showToast(msg, type) {{
+      const c = document.getElementById('toastContainer');
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || '');
+      t.textContent = msg;
+      c.appendChild(t);
+      requestAnimationFrame(() => t.classList.add('show'));
+      setTimeout(() => {{ t.classList.remove('show'); setTimeout(() => t.remove(), 300); }}, 2500);
+    }}
+
+    // === Table interactivity ===
+    function initTableInteractivity() {{
+      document.querySelectorAll('th.sortable').forEach(th => {{
+        th.addEventListener('click', function() {{
+          const tbl = this.closest('table');
+          const tb = tbl.querySelector('tbody');
+          if (!tb) return;
+          const ci = Number(this.dataset.col);
+          const asc = this.classList.contains('sort-asc');
+          tbl.querySelectorAll('th.sortable').forEach(t => t.classList.remove('sort-asc', 'sort-desc'));
+          this.classList.add(asc ? 'sort-desc' : 'sort-asc');
+          const rows = Array.from(tb.querySelectorAll('tr'));
+          const dir = asc ? -1 : 1;
+          rows.sort((a, b) => {{
+            const av = (a.cells[ci] || {{}}).textContent || '';
+            const bv = (b.cells[ci] || {{}}).textContent || '';
+            const an = parseFloat(av.replace(/[^0-9.\\-]/g, ''));
+            const bn = parseFloat(bv.replace(/[^0-9.\\-]/g, ''));
+            if (!isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+            return av.localeCompare(bv, 'zh') * dir;
+          }});
+          rows.forEach(r => tb.appendChild(r));
+        }});
+      }});
+      document.querySelectorAll('.table-search').forEach(input => {{
+        input.addEventListener('input', function() {{
+          const tbl = document.getElementById(this.dataset.target);
+          if (!tbl) return;
+          const q = this.value.trim().toLowerCase();
+          tbl.querySelectorAll('tbody tr').forEach(tr => {{
+            tr.classList.toggle('filtered-out', !!(q && !tr.textContent.toLowerCase().includes(q)));
+          }});
+        }});
+      }});
+      document.querySelectorAll('.table-export').forEach(btn => {{
+        btn.addEventListener('click', function() {{
+          const tbl = document.getElementById(this.dataset.target);
+          if (!tbl) return;
+          const rows = [];
+          tbl.querySelectorAll('tr').forEach(tr => {{
+            const cells = Array.from(tr.querySelectorAll('th,td')).map(c => '"' + c.textContent.trim().replace(/"/g, '""') + '"');
+            rows.push(cells.join(','));
+          }});
+          const csv = '\\uFEFF' + rows.join('\\n');
+          const blob = new Blob([csv], {{ type: 'text/csv;charset=utf-8;' }});
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = (this.dataset.target || 'table') + '.csv'; a.click();
+          URL.revokeObjectURL(url);
+          showToast('CSV 已导出', 'success');
+        }});
+      }});
+    }}
+
+    // === Sensitivity analysis ===
+    function renderSensitivityGrid() {{
+      const grid = document.getElementById('sensitivityGrid');
+      if (!grid) return;
+      const a = collectAssumptions();
+      const wC = a.wacc, tgC = a.terminal_growth;
+      const waccs = [], tgs = [];
+      for (let w = wC - 0.03; w <= wC + 0.03 + 0.001; w += 0.01) waccs.push(w);
+      for (let t = Math.max(0, tgC - 0.02); t <= tgC + 0.02 + 0.001; t += 0.005) tgs.push(t);
+      let minP = Infinity, maxP = -Infinity;
+      const results = [];
+      waccs.forEach(w => {{
+        const row = [];
+        tgs.forEach(t => {{
+          const ta = JSON.parse(JSON.stringify(a)); ta.wacc = w; ta.terminal_growth = t;
+          const d = compute(ta);
+          row.push(d.intrinsicPrice);
+          if (d.intrinsicPrice < minP) minP = d.intrinsicPrice;
+          if (d.intrinsicPrice > maxP) maxP = d.intrinsicPrice;
+        }});
+        results.push(row);
+      }});
+      function colorFor(p) {{
+        if (maxP === minP) return '#fde68a';
+        const r = (p - minP) / (maxP - minP);
+        if (r < 0.5) {{ const x = r * 2; return 'rgb(' + Math.round(185 + x * 70) + ',' + Math.round(28 + x * 210) + ',28)'; }}
+        const x = (r - 0.5) * 2;
+        return 'rgb(' + Math.round(255 - x * 246) + ',' + Math.round(238 - x * 88) + ',' + Math.round(138 - x * 57) + ')';
+      }}
+      let html = '<table class="sensitivity-table"><thead><tr><th class="axis-label">WACC \\ TG</th>';
+      tgs.forEach(t => {{ html += '<th>' + (t * 100).toFixed(1) + '%</th>'; }});
+      html += '</tr></thead><tbody>';
+      waccs.forEach((w, wi) => {{
+        html += '<tr><td class="axis-label">' + (w * 100).toFixed(1) + '%</td>';
+        results[wi].forEach((p, ti) => {{
+          const bg = colorFor(p);
+          const up = a.current_price ? p / a.current_price - 1 : 0;
+          const fc = up >= 0 ? '#065f46' : '#7f1d1d';
+          html += '<td style="background:' + bg + ';color:' + fc + '" data-wacc="' + w + '" data-tg="' + tgs[ti] + '">' + p.toFixed(2) + '</td>';
+        }});
+        html += '</tr>';
+      }});
+      grid.innerHTML = html + '</tbody></table>';
+      grid.querySelectorAll('td[data-wacc]').forEach(td => {{
+        td.addEventListener('click', function() {{
+          document.getElementById('wacc').value = (Number(this.dataset.wacc) * 100).toFixed(2);
+          document.getElementById('terminalGrowth').value = (Number(this.dataset.tg) * 100).toFixed(2);
+          renderValuation();
+          showToast('WACC ' + (Number(this.dataset.wacc)*100).toFixed(1) + '% / TG ' + (Number(this.dataset.tg)*100).toFixed(1) + '%', 'success');
+        }});
+      }});
+    }}
+
+    // === Scenario presets ===
+    function applyScenario(scenario) {{
+      const base = JSON.parse(JSON.stringify(initialAssumptions));
+      if (scenario === 'bull') {{
+        base.growths = base.growths.map(g => g + 0.05);
+        base.ebit_margins = base.ebit_margins.map(m => m + 0.02);
+        base.wacc = Math.max(base.wacc - 0.01, 0.05);
+        base.terminal_growth = Math.min(base.terminal_growth + 0.005, 0.04);
+      }} else if (scenario === 'bear') {{
+        base.growths = base.growths.map(g => Math.max(g - 0.05, -0.1));
+        base.ebit_margins = base.ebit_margins.map(m => Math.max(m - 0.02, 0.01));
+        base.wacc = base.wacc + 0.015;
+        base.terminal_growth = Math.max(base.terminal_growth - 0.005, 0);
+      }}
+      document.getElementById('currentPrice').value = base.current_price;
+      document.getElementById('sharesOutstanding').value = base.shares_outstanding;
+      document.getElementById('wacc').value = (base.wacc * 100).toFixed(2);
+      document.getElementById('terminalGrowth').value = (base.terminal_growth * 100).toFixed(2);
+      document.getElementById('netCash').value = base.net_cash;
+      document.getElementById('minorityInterest').value = base.minority_interest;
+      document.getElementById('longTermInvestments').value = base.long_term_investments;
+      document.getElementById('nonOpCurrentAssets').value = base.non_op_current_assets;
+      document.querySelectorAll('.assumption-input').forEach(input => {{
+        input.value = (base[input.dataset.array][Number(input.dataset.index)] * 100).toFixed(2);
+      }});
+      renderValuation();
+      const names = {{ bull: '乐观', base: '基准', bear: '悲观' }};
+      showToast('已切换至' + names[scenario] + '情景', 'success');
+    }}
+
+    // === Theme toggle ===
+    function initTheme() {{
+      const saved = localStorage.getItem('dashboard-theme') || 'light';
+      if (saved === 'dark') {{ document.body.classList.add('dark-theme'); document.getElementById('themeToggle').textContent = '\\u2600\\uFE0F'; }}
+      document.getElementById('themeToggle').addEventListener('click', function() {{
+        document.body.classList.toggle('dark-theme');
+        const isDark = document.body.classList.contains('dark-theme');
+        this.textContent = isDark ? '\\u2600\\uFE0F' : '\\uD83C\\uDF19';
+        localStorage.setItem('dashboard-theme', isDark ? 'dark' : 'light');
+        Object.values(chartRefs).forEach(c => c && c.resize());
+      }});
+    }}
+
+    // === Chart fullscreen ===
+    let modalChart = null;
+    function openChartFullscreen(chartId) {{
+      const modal = document.getElementById('chartModal');
+      const body = document.getElementById('chartModalBody');
+      body.innerHTML = '';
+      const el = document.createElement('div');
+      el.style.cssText = 'width:100%;height:100%;';
+      body.appendChild(el);
+      modal.classList.add('active');
+      if (chartOptions[chartId]) {{
+        modalChart = echarts.init(el);
+        const opt = JSON.parse(JSON.stringify(chartOptions[chartId]));
+        if (opt.dataZoom) opt.dataZoom = [{{ type: 'inside', start: 0, end: 100 }}];
+        if (opt.grid) {{ opt.grid.bottom = 50; opt.grid.top = 60; }}
+        modalChart.setOption(opt, true);
+      }}
+    }}
+    function initChartFullscreen() {{
+      document.querySelectorAll('.chart-card').forEach(card => {{
+        const chartEl = card.querySelector('.echart');
+        if (!chartEl) return;
+        const btn = document.createElement('button');
+        btn.className = 'chart-fullscreen-btn';
+        btn.textContent = '\\u2922';
+        btn.title = '放大查看';
+        btn.addEventListener('click', function(e) {{ e.stopPropagation(); openChartFullscreen(chartEl.id); }});
+        card.appendChild(btn);
+      }});
+      document.getElementById('chartModalClose').addEventListener('click', function() {{
+        document.getElementById('chartModal').classList.remove('active');
+        if (modalChart) {{ modalChart.dispose(); modalChart = null; }}
+      }});
+      document.getElementById('chartModal').addEventListener('click', function(e) {{
+        if (e.target === this) {{ this.classList.remove('active'); if (modalChart) {{ modalChart.dispose(); modalChart = null; }} }}
+      }});
+      document.addEventListener('keydown', function(e) {{
+        if (e.key === 'Escape') {{
+          const m = document.getElementById('chartModal');
+          if (m.classList.contains('active')) {{ m.classList.remove('active'); if (modalChart) {{ modalChart.dispose(); modalChart = null; }} }}
+        }}
+      }});
+    }}
+
+    // === Back to top ===
+    function initBackToTop() {{
+      const btn = document.getElementById('backToTop');
+      window.addEventListener('scroll', function() {{ btn.classList.toggle('visible', window.scrollY > 400); }});
+      btn.addEventListener('click', function() {{ window.scrollTo({{ top: 0, behavior: 'smooth' }}); }});
     }}
 
     document.querySelectorAll('.tab-btn').forEach(btn => {{
@@ -1138,12 +1432,22 @@ def build_html(
     document.getElementById('copyAssumptions').addEventListener('click', () => {{
       initialAssumptions = JSON.parse(JSON.stringify(collectAssumptions()));
       renderValuation();
-      alert('已使用当前预测数据作为本页面新的基准假设');
+      showToast('已使用当前预测数据作为本页面新的基准假设', 'success');
+    }});
+    document.querySelectorAll('.scenario-btn').forEach(btn => {{
+      btn.addEventListener('click', function() {{
+        document.querySelectorAll('.scenario-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        applyScenario(this.dataset.scenario);
+      }});
     }});
     window.addEventListener('resize', () => Object.values(chartRefs).forEach(c => c && c.resize()));
     renderFinancialCharts();
     renderValuation();
-    renderAssumptionAudit();
+    initTableInteractivity();
+    initTheme();
+    initChartFullscreen();
+    initBackToTop();
   </script>
 </body>
 </html>

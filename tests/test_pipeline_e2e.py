@@ -92,5 +92,5 @@ def test_company_sample_pipeline_regression(tmp_path: Path) -> None:
             workbook = load_workbook(results_dir / "05_valuation" / "DCF_valuation_model.xlsx", read_only=True)
             assert "Assumption_Audit" in workbook.sheetnames
             html = (results_dir / "financial_dcf_dashboard.html").read_text(encoding="utf-8")
-            assert "Assumption Audit" in html
-            assert "Valuation Risk Warnings" in html
+            assert "估值结论" in html
+            assert "可编辑 Assumptions" in html

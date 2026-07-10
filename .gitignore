@@ -17,6 +17,7 @@ Thumbs.db
 
 .idea/
 .vscode/
+.workbuddy/
 
 results/
 !results/.gitkeep

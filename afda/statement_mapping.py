@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
-from typing import Iterable
+from pathlib import Path
+from typing import Dict, Iterable, List
 
 import pandas as pd
 
@@ -98,3 +100,23 @@ def describe_source_matches(
             }
         )
     return rows
+
+
+def load_mapping_rules(config_name: str) -> List[Dict]:
+    """Load mapping rules from a JSON config file.
+
+    Looks for ``configs/mapping_{config_name}.json`` relative to the project
+    root (the parent of the ``afda/`` package directory).  Falls back to the
+    built-in defaults defined in the rebuild modules if the file is missing.
+    """
+    config_path = Path(__file__).resolve().parent.parent / "configs" / f"mapping_{config_name}.json"
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"Mapping config file not found: {config_path}. "
+            f"Expected config_name one of: 'balance_sheet', 'income_statement', 'cash_flow'."
+        )
+    with config_path.open(encoding="utf-8") as f:
+        rules = json.load(f)
+    if not isinstance(rules, list):
+        raise ValueError(f"Mapping config {config_path} must contain a JSON list of rule dicts.")
+    return rules

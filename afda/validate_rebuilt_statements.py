@@ -1,4 +1,4 @@
-"""Independent checks for rebuilt standardized BS/PL/CF statements."""
+"""Step 8/11 — Independent checks for rebuilt standardized BS/PL/CF statements."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from typing import Dict, Iterable
 import pandas as pd
 
 import afda.pipeline_utils as pu
+from afda.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 OUTPUT_DIR_NAME = "rebuilt_statement_checks"
@@ -725,11 +728,11 @@ def main() -> None:
     output_dir = pu.REBUILT_DIR / OUTPUT_DIR_NAME
     save_outputs(output_dir, bs_checks, pl_checks, cf_checks)
     failed = int((~pd.concat([bs_checks, pl_checks, cf_checks], ignore_index=True)["Passed"]).sum())
-    print(f"Rebuilt statement checks generated: {output_dir}")
+    logger.info("Rebuilt statement checks generated: %s", output_dir)
     if failed:
-        print(f"Warning: {failed} check rows need review.")
+        logger.warning("%s check rows need review.", failed)
     else:
-        print("All rebuilt standardized statement checks passed.")
+        logger.info("All rebuilt standardized statement checks passed.")
 
 
 if __name__ == "__main__":

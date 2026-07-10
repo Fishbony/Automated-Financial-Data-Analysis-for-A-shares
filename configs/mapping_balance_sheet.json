@@ -1,0 +1,184 @@
+[
+  {
+    "standard_item": "Cash & Short-term Financial Assets",
+    "statement_side": "Assets",
+    "bucket": "Current Assets",
+    "classification": "现金及短期金融资产",
+    "source_items": ["货币资金(元)", "交易性金融资产(元)", "一年内到期的非流动资产(元)"],
+    "formula_desc": "货币资金 + 交易性金融资产 + 一年内到期的非流动资产"
+  },
+  {
+    "standard_item": "Core Operating Current Assets",
+    "statement_side": "Assets",
+    "bucket": "Current Assets",
+    "classification": "核心经营性营运流动资产",
+    "source_items": ["应收票据及应收账款(元)", "预付款项(元)", "存货(元)", "其他应收款合计(元)"],
+    "formula_desc": "应收票据及应收账款 + 预付款项 + 存货 + 其他应收款合计"
+  },
+  {
+    "standard_item": "Non-operating Misc. Current Assets",
+    "statement_side": "Assets",
+    "bucket": "Current Assets",
+    "classification": "非经营性杂项流动资产",
+    "source_items": ["其他流动资产(元)", "划分为持有待售的资产(元)"],
+    "formula_desc": "其他流动资产 + 划分为持有待售的资产"
+  },
+  {
+    "standard_item": "Long-term Core Operating Assets",
+    "statement_side": "Assets",
+    "bucket": "Non-current Assets",
+    "classification": "长期经营性核心资产",
+    "source_items": ["固定资产合计(元)", "在建工程合计(元)", "工程物资(元)", "无形资产(元)", "投资性房地产(元)"],
+    "formula_desc": "固定资产合计 + 在建工程合计 + 工程物资 + 无形资产 + 投资性房地产"
+  },
+  {
+    "standard_item": "Long-term Financial & Equity Investments",
+    "statement_side": "Assets",
+    "bucket": "Non-current Assets",
+    "classification": "长期对外财务&股权投资",
+    "source_items": ["长期股权投资(元)", "其他权益工具投资(元)", "其他非流动金融资产(元)", "可供出售金融资产(元)", "持有至到期投资(元)"],
+    "formula_desc": "长期股权投资 + 其他权益工具投资 + 其他非流动金融资产 + 可供出售金融资产 + 持有至到期投资"
+  },
+  {
+    "standard_item": "Risk & Amortizing Assets",
+    "statement_side": "Assets",
+    "bucket": "Non-current Assets",
+    "classification": "风险类&摊销类资产",
+    "source_items": ["商誉(元)", "长期待摊费用(元)"],
+    "formula_desc": "商誉 + 长期待摊费用"
+  },
+  {
+    "standard_item": "Tax & Other Long-term Assets",
+    "statement_side": "Assets",
+    "bucket": "Non-current Assets",
+    "classification": "税务&杂项长期资产",
+    "source_items": ["递延所得税资产(元)", "其他非流动资产(元)"],
+    "formula_desc": "递延所得税资产 + 其他非流动资产"
+  },
+  {
+    "standard_item": "Interest-bearing Short-term Debt",
+    "statement_side": "Liabilities",
+    "bucket": "Current Liabilities",
+    "classification": "刚性有息短期债务",
+    "source_items": ["短期借款(元)", "一年内到期的非流动负债(元)"],
+    "formula_desc": "短期借款 + 一年内到期的非流动负债"
+  },
+  {
+    "standard_item": "Operating Non-interest-bearing Current Liabilities",
+    "statement_side": "Liabilities",
+    "bucket": "Current Liabilities",
+    "classification": "经营性无息流动负债",
+    "source_items": ["应付票据及应付账款(元)", "预收款项(元)", "合同负债(元)", "应付职工薪酬(元)", "应交税费(元)"],
+    "formula_desc": "应付票据及应付账款 + 预收款项 + 合同负债 + 应付职工薪酬 + 应交税费"
+  },
+  {
+    "standard_item": "Non-operating Misc. Current Liabilities",
+    "statement_side": "Liabilities",
+    "bucket": "Current Liabilities",
+    "classification": "非经营杂项流动负债",
+    "source_items": ["衍生金融负债(元)", "以公允价值计量且其变动计入当期损益的金融负债(元)", "其他应付款合计(元)", "其他流动负债(元)"],
+    "formula_desc": "衍生金融负债 + 以公允价值计量且其变动计入当期损益的金融负债 + 其他应付款合计 + 其他流动负债"
+  },
+  {
+    "standard_item": "Long-term Interest-bearing Debt",
+    "statement_side": "Liabilities",
+    "bucket": "Non-current Liabilities",
+    "classification": "长期刚性有息债务",
+    "source_items": ["长期借款(元)", "应付债券(元)", "长期应付款合计(元)"],
+    "formula_desc": "长期借款 + 应付债券 + 长期应付款合计"
+  },
+  {
+    "standard_item": "Long-term Operating Non-interest-bearing Liabilities",
+    "statement_side": "Liabilities",
+    "bucket": "Non-current Liabilities",
+    "classification": "长期经营性无息负债",
+    "source_items": ["预计负债(元)"],
+    "formula_desc": "预计负债"
+  },
+  {
+    "standard_item": "Tax & Subsidy-related Non-cash Liabilities",
+    "statement_side": "Liabilities",
+    "bucket": "Non-current Liabilities",
+    "classification": "税务&补贴类非现金负债",
+    "source_items": ["递延所得税负债(元)", "递延收益-非流动负债(元)", "其他非流动负债(元)"],
+    "formula_desc": "递延所得税负债 + 递延收益-非流动负债 + 其他非流动负债"
+  },
+  {
+    "standard_item": "Parent Contributed Capital",
+    "statement_side": "Equity",
+    "bucket": "Equity",
+    "classification": "归母投入股本",
+    "source_items": ["实收资本（或股本）(元)", "资本公积(元)", "减：库存股(元)"],
+    "source_signs": {"减：库存股(元)": -1.0},
+    "formula_desc": "实收资本（或股本） + 资本公积 - 库存股（若库存股为负则直接相加）"
+  },
+  {
+    "standard_item": "Parent Retained Earnings",
+    "statement_side": "Equity",
+    "bucket": "Equity",
+    "classification": "归母累计留存利润",
+    "source_items": ["盈余公积(元)", "未分配利润(元)"],
+    "formula_desc": "盈余公积 + 未分配利润"
+  },
+  {
+    "standard_item": "Other Comprehensive Income (OCI)",
+    "statement_side": "Equity",
+    "bucket": "Equity",
+    "classification": "其他综合收益（OCI）",
+    "source_items": ["其他综合收益(元)"],
+    "formula_desc": "其他综合收益"
+  },
+  {
+    "standard_item": "Minority Interest",
+    "statement_side": "Equity",
+    "bucket": "Equity",
+    "classification": "少数股东权益",
+    "source_items": ["少数股东权益(元)"],
+    "formula_desc": "少数股东权益"
+  },
+  {
+    "standard_item": "Other Current Assets / Residual",
+    "statement_side": "Assets",
+    "bucket": "Current Assets",
+    "classification": "流动资产剩余调节项",
+    "source_items": [],
+    "residual_target": "流动资产合计(元)",
+    "formula_desc": "流动资产合计 - 已映射流动资产明细"
+  },
+  {
+    "standard_item": "Other Non-current Assets / Residual",
+    "statement_side": "Assets",
+    "bucket": "Non-current Assets",
+    "classification": "非流动资产剩余调节项",
+    "source_items": [],
+    "residual_target": "非流动资产合计(元)",
+    "formula_desc": "非流动资产合计 - 已映射非流动资产明细"
+  },
+  {
+    "standard_item": "Other Current Liabilities / Residual",
+    "statement_side": "Liabilities",
+    "bucket": "Current Liabilities",
+    "classification": "流动负债剩余调节项",
+    "source_items": [],
+    "residual_target": "流动负债合计(元)",
+    "formula_desc": "流动负债合计 - 已映射流动负债明细"
+  },
+  {
+    "standard_item": "Other Non-current Liabilities / Residual",
+    "statement_side": "Liabilities",
+    "bucket": "Non-current Liabilities",
+    "classification": "非流动负债剩余调节项",
+    "source_items": [],
+    "residual_target": "非流动负债合计(元)",
+    "formula_desc": "非流动负债合计 - 已映射非流动负债明细"
+  },
+  {
+    "standard_item": "Other Equity / Residual",
+    "statement_side": "Equity",
+    "bucket": "Equity",
+    "classification": "权益剩余调节项",
+    "source_items": [],
+    "residual_target": "所有者权益（或股东权益）合计(元)",
+    "formula_desc": "所有者权益合计 - 已映射权益明细"
+  }
+]

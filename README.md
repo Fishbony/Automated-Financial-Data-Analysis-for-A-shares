@@ -38,8 +38,13 @@
 .
 ├── afda/                         # 核心 Python 包与流水线脚本
 │   ├── run_pipeline.py           # 一键流水线入口
+│   ├── batch_run.py              # 批量多公司流水线入口
 │   ├── input_validation.py       # 输入文件与 Info.csv 校验
 │   ├── pipeline_utils.py         # 路径、ticker 识别、输出目录工具
+│   ├── logging_config.py         # 统一日志配置（替代 print）
+│   ├── checkpoint.py             # 断点续跑检查点管理
+│   ├── statement_base.py         # 三表重构公共基类（去重）
+│   ├── statement_mapping.py      # 映射规则加载器（JSON 外置）
 │   ├── step1_convert_xls_to_csv.py
 │   ├── step2_check_statements.py
 │   ├── step3_extract_metrics.py
@@ -50,19 +55,26 @@
 │   ├── validate_rebuilt_statements.py
 │   ├── analyze_rebuilt_statements.py
 │   ├── generate_dcf_valuation.py
+│   ├── dcf_core.py               # DCF 估值核心计算逻辑
+│   ├── dcf_types.py              # DCF 数据类型定义（TypedDict）
+│   ├── dcf_excel_styles.py       # DCF Excel 样式工具
+│   ├── dcf_excel_sheets.py       # DCF Excel 工作表生成器
 │   ├── generate_html_report.py
 │   └── valuation_config.py
 ├── assets/                       # HTML 看板静态资源
 ├── configs/
 │   ├── default_valuation.json    # 默认 DCF、相对估值、敏感性参数
-│   └── industry_profiles.json    # 行业估值框架说明
+│   ├── industry_profiles.json    # 行业估值框架说明
+│   ├── mapping_balance_sheet.json      # 资产负债表映射规则
+│   ├── mapping_income_statement.json   # 利润表映射规则
+│   └── mapping_cash_flow.json          # 现金流量表映射规则
 ├── demo/                         # 样例数据与后续测试目录
 │   ├── 002311_debt_year.xls
 │   ├── 002311_benefit_year.xls
 │   ├── 002311_cash_year.xls
 │   ├── Info.csv
 │   └── results/                  # demo 流水线输出
-├── tests/                        # 当前单元测试
+├── tests/                        # 单元测试与端到端测试
 ├── run_pipeline.py               # 兼容旧命令的薄入口
 ├── pyproject.toml
 ├── requirements.txt
@@ -193,6 +205,55 @@ python -m afda.run_pipeline --data-dir "D:/path/to/export-folder"
 
 不传路径时，程序会尝试弹出文件夹选择窗口；如果当前环境无法弹窗，会回退到命令行输入路径。
 
+默认使用进程内调用（in-process）模式运行各步骤，启动更快。如需强制使用子进程隔离模式：
+
+```bash
+python -m afda.run_pipeline --subprocess demo
+```
+
+### 断点续跑
+
+流水线支持检查点机制，可在中断后跳过已完成的步骤：
+
+```bash
+# 首次运行（正常执行全部步骤）
+python -m afda.run_pipeline demo
+
+# 再次运行时跳过已完成步骤
+python -m afda.run_pipeline demo --resume
+
+# 忽略检查点，从头运行
+python -m afda.run_pipeline demo --force
+```
+
+检查点文件位于 `results/.pipeline_checkpoint.json`，记录每个步骤的完成时间。
+
+### 批量多公司运行
+
+当需要同时处理多家公司时，将各公司数据分别放入子目录，然后用批量模式运行：
+
+```bash
+python -m afda.batch_run "D:/path/to/companies"
+```
+
+目录结构要求：
+
+```text
+companies/
+├── 000001/          # 每个子目录包含一家公司的 XLS 文件
+│   ├── 000001_debt_year.xls
+│   ├── 000001_benefit_year.xls
+│   ├── 000001_cash_year.xls
+│   └── Info.csv     # 可选
+├── 600519/
+│   ├── 600519_debt_year.xls
+│   └── ...
+└── 002311/
+    └── ...
+```
+
+批量模式支持 `--resume`、`--force` 和 `--subprocess` 参数，含义与单公司模式相同。每家公司独立运行，一家失败不会阻止后续公司。
+
 完整流水线顺序：
 
 | Step | 模块 | 主要输出 |
@@ -289,10 +350,10 @@ AI memo 只基于输入财务数据和模型结果，不会自动获取公告、
 
 ## 测试
 
-当前单元测试：
+当前单元测试与端到端测试：
 
 ```bash
-python -m unittest discover -s tests
+python -m pytest tests/ -x -q
 ```
 
 端到端样例测试以 `demo/` 为准：
@@ -315,14 +376,14 @@ python -m afda.run_pipeline demo
 
 ## 当前局限
 
-- 当前以单公司、单目录为主，不是多公司批量估值系统。
+- 批量模式依次运行各公司，暂不支持并行处理。
 - 相对估值倍数来自配置文件，不会自动抓取可比公司估值中枢。
 - DCF 默认假设由历史数据和配置外推，不能替代行业研究和公司经营预测。
 - 金融股、强周期股、SOTP 公司仍需要人工调整估值框架。
 
 ## Roadmap
 
-- 批量估值：支持多 ticker 子目录独立运行并汇总结果。
+- 并行批量：支持多公司并行处理，提升批量估值效率。
 - 行业模板：按金融、周期、成长、公用事业、SOTP 自动切换估值框架。
 - 可比公司：接入手动 comps 表或外部数据源。
 - 情景分析：增加 Base/Bull/Bear 三情景和概率加权目标价。

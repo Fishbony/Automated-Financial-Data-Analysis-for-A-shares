@@ -1,5 +1,5 @@
 """
-Step 4/8 — 完整财务指标报告（增强版）
+Step 4/11 — 完整财务指标报告（增强版）
 ======================================
 在 step3_extract_metrics.py 的基础上，新增 YoY 增速、CAGR、
 ROE、资产负债率、CFO 质量等指标，并输出完整的 Markdown 分析报告。
@@ -52,9 +52,10 @@ from openpyxl.styles import Font as XLFont, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from afda.excel_utils import apply_bilingual_fonts
 from afda.llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
+from afda.logging_config import get_logger
 from afda.pipeline_utils import CSV_DIR, METRICS_DIR, ensure_output_dirs
 
-ensure_output_dirs()
+logger = get_logger(__name__)
 
 PL_FILE = str(CSV_DIR / "pl.csv")
 BS_FILE = str(CSV_DIR / "bs.csv")
@@ -324,6 +325,7 @@ def _apply_fonts_to_file(output_path: str) -> None:
 
 
 def main():
+    ensure_output_dirs()
     pl = load_statement(PL_FILE)
     bs = load_statement(BS_FILE)
     cf = load_statement(CF_FILE)
@@ -552,7 +554,7 @@ def main():
 
     Path(OUTPUT_MD).write_text("\n".join(lines), encoding="utf-8")
 
-    print(OUTPUT_XLSX, OUTPUT_MD, OUTPUT_MISSING)
+    logger.info("已生成：%s, %s, %s", OUTPUT_XLSX, OUTPUT_MD, OUTPUT_MISSING)
 
 if __name__ == "__main__":
     main()

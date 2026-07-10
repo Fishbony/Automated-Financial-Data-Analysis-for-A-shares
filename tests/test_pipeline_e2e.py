@@ -75,9 +75,9 @@ def test_company_sample_pipeline_regression(tmp_path: Path) -> None:
 
         stdout = completed.stdout
         assert stdout.index("Automated Financial Data Analysis for A-shares") < stdout.index(
-            "[RUN] afda.step1_convert_xls_to_csv"
+            "[RUN:in-process] afda.step1_convert_xls_to_csv"
         )
-        assert stdout.index("[RUN] afda.step1_convert_xls_to_csv") < stdout.index(
+        assert stdout.index("[RUN:in-process] afda.step1_convert_xls_to_csv") < stdout.index(
             "Step 1: convert RoyalFlush XLS exports to CSV"
         )
         assert "Pipeline completed successfully." in stdout

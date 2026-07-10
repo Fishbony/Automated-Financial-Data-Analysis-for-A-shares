@@ -1,5 +1,5 @@
 """
-Step 1/8: convert RoyalFlush XLS exports to standardized CSV files.
+Step 1/11: convert RoyalFlush XLS exports to standardized CSV files.
 
 Required input files in the data directory:
 - {ticker}_debt_year.xls
@@ -19,11 +19,13 @@ import pandas as pd
 import xlrd
 
 from afda.input_validation import require_valid_input
+from afda.logging_config import get_logger
 from afda.pipeline_utils import CSV_DIR, ensure_output_dirs, prompt_data_dir_with_dialog, validate_rawdata
+
+logger = get_logger(__name__)
 
 
 OUTPUT_DIR = CSV_DIR
-ensure_output_dirs()
 
 
 def trans_csv(file_name: str, new_name: str) -> None:
@@ -99,42 +101,44 @@ def main() -> None:
     if data_dir is None:
         data_dir = prompt_data_dir_with_dialog()
 
-    print("Step 1: convert RoyalFlush XLS exports to CSV")
-    print("=" * 50)
+    ensure_output_dirs()
+
+    logger.info("Step 1: convert RoyalFlush XLS exports to CSV")
+    logger.info("=" * 50)
 
     require_valid_input(data_dir)
 
     try:
         stocks_ticker, raw_files = validate_rawdata(data_dir)
     except Exception as exc:
-        print(f"Error: {exc}")
+        logger.error("Error: %s", exc)
         raise SystemExit(1) from exc
 
-    print(f"Ticker detected: {stocks_ticker}")
-    print(f"Input directory: {Path(data_dir)}")
-    print("-" * 50)
-    print("Converting financial statements...")
+    logger.info("Ticker detected: %s", stocks_ticker)
+    logger.info("Input directory: %s", Path(data_dir))
+    logger.info("-" * 50)
+    logger.info("Converting financial statements...")
 
     trans_csv(str(raw_files["balance_sheet"]), str(CSV_DIR / "bs.csv"))
-    print("    1. balance sheet saved")
+    logger.info("    1. balance sheet saved")
 
     trans_csv(str(raw_files["profit_loss"]), str(CSV_DIR / "pl.csv"))
-    print("    2. income statement saved")
+    logger.info("    2. income statement saved")
 
     trans_csv(str(raw_files["cash_flow"]), str(CSV_DIR / "cf.csv"))
-    print("    3. cash flow statement saved")
+    logger.info("    3. cash flow statement saved")
 
-    print("-" * 50)
-    print("Converting price file...")
+    logger.info("-" * 50)
+    logger.info("Converting price file...")
 
     if "price" in raw_files:
         trans_price_csv(str(raw_files["price"]), str(CSV_DIR / "price.csv"))
-        print("    4. price file saved")
+        logger.info("    4. price file saved")
     else:
-        print("    4. price file not found; skipped")
+        logger.info("    4. price file not found; skipped")
 
-    print("=" * 50)
-    print(f"Step 1 completed. CSV files were saved to {CSV_DIR}")
+    logger.info("=" * 50)
+    logger.info("Step 1 completed. CSV files were saved to %s", CSV_DIR)
 
 
 if __name__ == "__main__":

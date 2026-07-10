@@ -34,6 +34,10 @@ import csv
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
+from afda.logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 RAW_DIR = Path("./demo/rawdata")
 RESULTS_DIR = Path(os.environ.get("AFDA_RESULTS_DIR", "./results"))
@@ -139,7 +143,7 @@ def prompt_data_dir_with_dialog(initial_dir: Optional[Path | str] = None) -> Pat
     while True:
         value = input("Enter data folder path: ").strip().strip('"').strip("'")
         if not value:
-            print("Path cannot be empty. Please try again.")
+            logger.warning("Path cannot be empty. Please try again.")
             continue
         return Path(value)
 

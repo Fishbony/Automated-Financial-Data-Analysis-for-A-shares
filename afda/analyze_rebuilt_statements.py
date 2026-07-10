@@ -1,4 +1,4 @@
-"""DeepSeek analysis for rebuilt financial statements."""
+"""Step 9/11 — DeepSeek analysis for rebuilt financial statements."""
 
 from __future__ import annotations
 
@@ -11,6 +11,9 @@ import pandas as pd
 
 from afda.llm_client import deepseek_configured, deepseek_enabled, generate_deepseek_analysis
 import afda.pipeline_utils as pu
+from afda.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 OUTPUT_NAME = "rebuilt_statement_deepseek_analysis.md"
@@ -238,7 +241,7 @@ def build_context(data_dir: Path) -> str:
             derived_compact[col] = derived_compact[col].map(money)
 
     return f"""
-公司/目录：{build_company_label(data_dir)}
+公司/目录：（已脱敏，不发送公司名称与代码）
 覆盖年份：{years[0]}-{years[-1]}
 数据来源：rebuild 后的标准化资产负债表、利润表、现金流量表。
 
@@ -333,12 +336,12 @@ def main() -> None:
 
     if not deepseek_enabled():
         write_skip_report(output_path, "ENABLE_DEEPSEEK_ANALYSIS is not enabled.")
-        print(f"DeepSeek analysis skipped; report written to {output_path}")
+        logger.info("DeepSeek analysis skipped; report written to %s", output_path)
         return
 
     if not deepseek_configured():
         write_skip_report(output_path, "DEEPSEEK_API_KEY is not set.")
-        print(f"DeepSeek analysis skipped; report written to {output_path}")
+        logger.info("DeepSeek analysis skipped; report written to %s", output_path)
         return
 
     context = build_context(data_dir)
@@ -354,7 +357,7 @@ def main() -> None:
         )
     except Exception as exc:
         write_skip_report(output_path, f"DeepSeek request failed: {exc}")
-        print(f"DeepSeek analysis failed; report written to {output_path}")
+        logger.warning("DeepSeek analysis failed; report written to %s", output_path)
         return
 
     output_path.write_text(
@@ -366,7 +369,7 @@ def main() -> None:
 """,
         encoding="utf-8",
     )
-    print(f"DeepSeek rebuilt statement analysis generated: {output_path}")
+    logger.info("DeepSeek rebuilt statement analysis generated: %s", output_path)
 
 
 if __name__ == "__main__":

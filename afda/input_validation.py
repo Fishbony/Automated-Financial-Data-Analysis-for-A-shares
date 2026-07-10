@@ -7,6 +7,9 @@ from pathlib import Path
 import pandas as pd
 
 from afda.pipeline_utils import find_info_file, validate_rawdata
+from afda.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 REQUIRED_INFO_ITEMS = {
@@ -148,7 +151,7 @@ def validate_input_folder(data_dir: Path | str, require_info: bool = False) -> V
 
 def print_validation_report(report: ValidationReport, include_success: bool = False) -> None:
     if include_success or report.errors or report.warnings:
-        print(report.format())
+        logger.info("%s", report.format())
 
 
 def require_valid_input(data_dir: Path | str, require_info: bool = False) -> ValidationReport:

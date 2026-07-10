@@ -1,5 +1,5 @@
 """
-Step 5/8 — 资产负债表标准化重构
+Step 5/11 — 资产负债表标准化重构
 ================================
 将同花顺原始资产负债表 CSV 清洗、去重，并按投行建模口径重新分类，
 输出标准化长表、宽表、估值输入底稿及完整的映射追溯体系。
@@ -55,56 +55,29 @@ Equity
 """
 
 import os
-import re
 import json
 from typing import Dict, List, Tuple
 
 import pandas as pd
-from openpyxl import load_workbook
-from afda.excel_utils import apply_bilingual_fonts
 from afda.pipeline_utils import BS_REBUILT_DIR, CSV_DIR
-from afda.statement_mapping import describe_source_matches, resolve_item_name, sum_source_items
+from afda.logging_config import get_logger
+from afda.statement_base import (
+    apply_bilingual_fonts_to_file,
+    create_excel_writer,
+    ensure_output_dir,
+    load_statement_csv,
+    safe_row_sum,
+)
+from afda.statement_mapping import describe_source_matches, load_mapping_rules, resolve_item_name
+
+logger = get_logger(__name__)
 
 
 OUTPUT_DIR = str(BS_REBUILT_DIR)
 
 
-def ensure_output_dir(output_dir: str) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-
-
-def normalize_item_name(name: str) -> str:
-    if pd.isna(name):
-        return ""
-    name = str(name).strip()
-    name = name.replace("\\ufeff", "")
-    name = re.sub(r"^[*＊]+", "", name)
-    name = re.sub(r"\s+", "", name)
-    return name
-
-
-def to_numeric_frame(df: pd.DataFrame, year_cols: List[str]) -> pd.DataFrame:
-    out = df.copy()
-    for col in year_cols:
-        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0)
-    return out
-
-
-def safe_row_sum(df: pd.DataFrame, item_col: str, year_cols: List[str], item_name: str) -> pd.Series:
-    return sum_source_items(df, item_col, year_cols, [item_name])
-
-
 def load_bs_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
-    df = pd.read_csv(input_path)
-    first_col = df.columns[0]
-    year_cols = [c for c in df.columns[1:]]
-    if not year_cols:
-        raise ValueError("未识别到年份列，请检查CSV格式。")
-    df = df.rename(columns={first_col: "原始科目"})
-    df["原始科目"] = df["原始科目"].apply(normalize_item_name)
-    df = df[df["原始科目"] != ""].copy()
-    df = to_numeric_frame(df, year_cols)
-    return df, "原始科目", year_cols
+    return load_statement_csv(input_path, item_col_name="原始科目", error_label="资产负债表")
 
 
 def build_drop_list() -> List[str]:
@@ -225,190 +198,7 @@ def preprocess_bs(df: pd.DataFrame, item_col: str, year_cols: List[str]) -> Tupl
 
 
 def build_mapping_rules() -> List[Dict]:
-    return [
-        {
-            "standard_item": "Cash & Short-term Financial Assets",
-            "statement_side": "Assets",
-            "bucket": "Current Assets",
-            "classification": "现金及短期金融资产",
-            "source_items": ["货币资金(元)", "交易性金融资产(元)", "一年内到期的非流动资产(元)"],
-            "formula_desc": "货币资金 + 交易性金融资产 + 一年内到期的非流动资产",
-        },
-        {
-            "standard_item": "Core Operating Current Assets",
-            "statement_side": "Assets",
-            "bucket": "Current Assets",
-            "classification": "核心经营性营运流动资产",
-            "source_items": ["应收票据及应收账款(元)", "预付款项(元)", "存货(元)", "其他应收款合计(元)"],
-            "formula_desc": "应收票据及应收账款 + 预付款项 + 存货 + 其他应收款合计",
-        },
-        {
-            "standard_item": "Non-operating Misc. Current Assets",
-            "statement_side": "Assets",
-            "bucket": "Current Assets",
-            "classification": "非经营性杂项流动资产",
-            "source_items": ["其他流动资产(元)", "划分为持有待售的资产(元)"],
-            "formula_desc": "其他流动资产 + 划分为持有待售的资产",
-        },
-        {
-            "standard_item": "Long-term Core Operating Assets",
-            "statement_side": "Assets",
-            "bucket": "Non-current Assets",
-            "classification": "长期经营性核心资产",
-            "source_items": ["固定资产合计(元)", "在建工程合计(元)", "工程物资(元)", "无形资产(元)", "投资性房地产(元)"],
-            "formula_desc": "固定资产合计 + 在建工程合计 + 工程物资 + 无形资产 + 投资性房地产",
-        },
-        {
-            "standard_item": "Long-term Financial & Equity Investments",
-            "statement_side": "Assets",
-            "bucket": "Non-current Assets",
-            "classification": "长期对外财务&股权投资",
-            "source_items": ["长期股权投资(元)", "其他权益工具投资(元)", "其他非流动金融资产(元)", "可供出售金融资产(元)", "持有至到期投资(元)"],
-            "formula_desc": "长期股权投资 + 其他权益工具投资 + 其他非流动金融资产 + 可供出售金融资产 + 持有至到期投资",
-        },
-        {
-            "standard_item": "Risk & Amortizing Assets",
-            "statement_side": "Assets",
-            "bucket": "Non-current Assets",
-            "classification": "风险类&摊销类资产",
-            "source_items": ["商誉(元)", "长期待摊费用(元)"],
-            "formula_desc": "商誉 + 长期待摊费用",
-        },
-        {
-            "standard_item": "Tax & Other Long-term Assets",
-            "statement_side": "Assets",
-            "bucket": "Non-current Assets",
-            "classification": "税务&杂项长期资产",
-            "source_items": ["递延所得税资产(元)", "其他非流动资产(元)"],
-            "formula_desc": "递延所得税资产 + 其他非流动资产",
-        },
-        {
-            "standard_item": "Interest-bearing Short-term Debt",
-            "statement_side": "Liabilities",
-            "bucket": "Current Liabilities",
-            "classification": "刚性有息短期债务",
-            "source_items": ["短期借款(元)", "一年内到期的非流动负债(元)"],
-            "formula_desc": "短期借款 + 一年内到期的非流动负债",
-        },
-        {
-            "standard_item": "Operating Non-interest-bearing Current Liabilities",
-            "statement_side": "Liabilities",
-            "bucket": "Current Liabilities",
-            "classification": "经营性无息流动负债",
-            "source_items": ["应付票据及应付账款(元)", "预收款项(元)", "合同负债(元)", "应付职工薪酬(元)", "应交税费(元)"],
-            "formula_desc": "应付票据及应付账款 + 预收款项 + 合同负债 + 应付职工薪酬 + 应交税费",
-        },
-        {
-            "standard_item": "Non-operating Misc. Current Liabilities",
-            "statement_side": "Liabilities",
-            "bucket": "Current Liabilities",
-            "classification": "非经营杂项流动负债",
-            "source_items": ["衍生金融负债(元)", "以公允价值计量且其变动计入当期损益的金融负债(元)", "其他应付款合计(元)", "其他流动负债(元)"],
-            "formula_desc": "衍生金融负债 + 以公允价值计量且其变动计入当期损益的金融负债 + 其他应付款合计 + 其他流动负债",
-        },
-        {
-            "standard_item": "Long-term Interest-bearing Debt",
-            "statement_side": "Liabilities",
-            "bucket": "Non-current Liabilities",
-            "classification": "长期刚性有息债务",
-            "source_items": ["长期借款(元)", "应付债券(元)", "长期应付款合计(元)"],
-            "formula_desc": "长期借款 + 应付债券 + 长期应付款合计",
-        },
-        {
-            "standard_item": "Long-term Operating Non-interest-bearing Liabilities",
-            "statement_side": "Liabilities",
-            "bucket": "Non-current Liabilities",
-            "classification": "长期经营性无息负债",
-            "source_items": ["预计负债(元)"],
-            "formula_desc": "预计负债",
-        },
-        {
-            "standard_item": "Tax & Subsidy-related Non-cash Liabilities",
-            "statement_side": "Liabilities",
-            "bucket": "Non-current Liabilities",
-            "classification": "税务&补贴类非现金负债",
-            "source_items": ["递延所得税负债(元)", "递延收益-非流动负债(元)", "其他非流动负债(元)"],
-            "formula_desc": "递延所得税负债 + 递延收益-非流动负债 + 其他非流动负债",
-        },
-        {
-            "standard_item": "Parent Contributed Capital",
-            "statement_side": "Equity",
-            "bucket": "Equity",
-            "classification": "归母投入股本",
-            "source_items": ["实收资本（或股本）(元)", "资本公积(元)", "减：库存股(元)"],
-            "source_signs": {"减：库存股(元)": -1.0},
-            "formula_desc": "实收资本（或股本） + 资本公积 - 库存股（若库存股为负则直接相加）",
-        },
-        {
-            "standard_item": "Parent Retained Earnings",
-            "statement_side": "Equity",
-            "bucket": "Equity",
-            "classification": "归母累计留存利润",
-            "source_items": ["盈余公积(元)", "未分配利润(元)"],
-            "formula_desc": "盈余公积 + 未分配利润",
-        },
-        {
-            "standard_item": "Other Comprehensive Income (OCI)",
-            "statement_side": "Equity",
-            "bucket": "Equity",
-            "classification": "其他综合收益（OCI）",
-            "source_items": ["其他综合收益(元)"],
-            "formula_desc": "其他综合收益",
-        },
-        {
-            "standard_item": "Minority Interest",
-            "statement_side": "Equity",
-            "bucket": "Equity",
-            "classification": "少数股东权益",
-            "source_items": ["少数股东权益(元)"],
-            "formula_desc": "少数股东权益",
-        },
-        {
-            "standard_item": "Other Current Assets / Residual",
-            "statement_side": "Assets",
-            "bucket": "Current Assets",
-            "classification": "流动资产剩余调节项",
-            "source_items": [],
-            "residual_target": "流动资产合计(元)",
-            "formula_desc": "流动资产合计 - 已映射流动资产明细",
-        },
-        {
-            "standard_item": "Other Non-current Assets / Residual",
-            "statement_side": "Assets",
-            "bucket": "Non-current Assets",
-            "classification": "非流动资产剩余调节项",
-            "source_items": [],
-            "residual_target": "非流动资产合计(元)",
-            "formula_desc": "非流动资产合计 - 已映射非流动资产明细",
-        },
-        {
-            "standard_item": "Other Current Liabilities / Residual",
-            "statement_side": "Liabilities",
-            "bucket": "Current Liabilities",
-            "classification": "流动负债剩余调节项",
-            "source_items": [],
-            "residual_target": "流动负债合计(元)",
-            "formula_desc": "流动负债合计 - 已映射流动负债明细",
-        },
-        {
-            "standard_item": "Other Non-current Liabilities / Residual",
-            "statement_side": "Liabilities",
-            "bucket": "Non-current Liabilities",
-            "classification": "非流动负债剩余调节项",
-            "source_items": [],
-            "residual_target": "非流动负债合计(元)",
-            "formula_desc": "非流动负债合计 - 已映射非流动负债明细",
-        },
-        {
-            "standard_item": "Other Equity / Residual",
-            "statement_side": "Equity",
-            "bucket": "Equity",
-            "classification": "权益剩余调节项",
-            "source_items": [],
-            "residual_target": "所有者权益（或股东权益）合计(元)",
-            "formula_desc": "所有者权益合计 - 已映射权益明细",
-        },
-    ]
+    return load_mapping_rules("balance_sheet")
 
 
 def build_mapping_detail(pre_df: pd.DataFrame, item_col: str, rules: List[Dict]) -> pd.DataFrame:
@@ -865,12 +655,8 @@ def export_excel_package(
 ) -> None:
     standardized_wide = build_standardized_bs_wide(standardized_df)
 
-    try:
-        writer = pd.ExcelWriter(output_path, engine="xlsxwriter")
-        engine = "xlsxwriter"
-    except Exception:
-        writer = pd.ExcelWriter(output_path, engine="openpyxl")
-        engine = "openpyxl"
+    writer, use_xlsxwriter = create_excel_writer(output_path)
+    engine = "xlsxwriter" if use_xlsxwriter else "openpyxl"
 
     with writer:
         readme_df = pd.DataFrame(
@@ -965,13 +751,6 @@ def export_excel_package(
     return
 
 
-def _apply_bilingual_fonts_to_file(path: str) -> None:
-    """重新打开 xlsx 文件，应用双语字体（Calibri / 黑体）后保存。"""
-    wb = load_workbook(path)
-    apply_bilingual_fonts(wb)
-    wb.save(path)
-
-
 def save_outputs(
     output_dir: str,
     preprocess_df: pd.DataFrame,
@@ -999,7 +778,7 @@ def save_outputs(
         bridge_df=bridge_df,
         valuation_df=valuation_df,
     )
-    _apply_bilingual_fonts_to_file(excel_path)
+    apply_bilingual_fonts_to_file(excel_path)
     with open(os.path.join(output_dir, "BS重构过程说明.md"), "w", encoding="utf-8") as f:
         f.write(md_text)
 
@@ -1023,7 +802,7 @@ def main(input_csv: str = str(CSV_DIR / "bs.csv"), output_dir: str = OUTPUT_DIR)
         valuation_df=valuation_df,
         md_text=md_text,
     )
-    print(f"完成。输出目录：{output_dir}")
+    logger.info("完成。输出目录：%s", output_dir)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 """
-Step 9/9 - offline HTML dashboard and interactive DCF valuation tool.
+Step 11/11 - offline HTML dashboard and interactive DCF valuation tool.
 
 The generated HTML has independent tabs for:
 1. Financial overview: historical financial metrics and charts.
@@ -32,6 +32,9 @@ from afda.html_report_core import (
     statement_section,
     table,
 )
+from afda.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def parse_args() -> argparse.Namespace:
@@ -1161,7 +1164,7 @@ def main() -> None:
     output_path = RESULTS_DIR / OUTPUT_FILE_NAME
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(build_html(data, assumptions, dcf, echarts_src, statements), encoding="utf-8")
-    print(f"HTML dashboard generated: {output_path}")
+    logger.info("HTML dashboard generated: %s", output_path)
 
 
 if __name__ == "__main__":

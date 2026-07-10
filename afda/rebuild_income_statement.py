@@ -1,5 +1,5 @@
 """
-Step 6/8 — 利润表标准化重构
+Step 6/11 — 利润表标准化重构
 ============================
 将同花顺原始利润表 CSV 清洗、排序，并按投行建模口径重新分类，
 输出标准化长表、宽表、估值输入底稿及映射追溯体系。
@@ -56,47 +56,27 @@ import os
 from typing import Dict, List, Tuple
 
 import pandas as pd
-from openpyxl import load_workbook
-from afda.excel_utils import apply_bilingual_fonts
 from afda.pipeline_utils import CSV_DIR, PL_REBUILT_DIR
-from afda.statement_mapping import describe_source_matches, sum_source_items
+from afda.logging_config import get_logger
+from afda.statement_base import (
+    apply_bilingual_fonts_to_file,
+    build_standardized_item_wide as _build_item_wide,
+    build_standardized_wide as _build_wide,
+    ensure_output_dir,
+    export_statement_excel,
+    load_statement_csv,
+    safe_row_sum,
+)
+from afda.statement_mapping import describe_source_matches, load_mapping_rules
+
+logger = get_logger(__name__)
 
 
 OUTPUT_DIR = str(PL_REBUILT_DIR)
 
 
-def ensure_output_dir(output_dir: str) -> None:
-    os.makedirs(output_dir, exist_ok=True)
-
-
-def normalize_item_name(name: str) -> str:
-    if pd.isna(name):
-        return ""
-    return str(name).replace("\ufeff", "").replace("*", "").strip()
-
-
-def to_numeric_frame(df: pd.DataFrame, year_cols: List[str]) -> pd.DataFrame:
-    out = df.copy()
-    for col in year_cols:
-        out[col] = pd.to_numeric(out[col], errors="coerce").fillna(0.0)
-    return out
-
-
-def safe_row_sum(df: pd.DataFrame, item_col: str, year_cols: List[str], item_names: List[str]) -> pd.Series:
-    return sum_source_items(df, item_col, year_cols, item_names)
-
-
 def load_pl_csv(input_path: str) -> Tuple[pd.DataFrame, str, List[str]]:
-    df = pd.read_csv(input_path)
-    first_col = df.columns[0]
-    year_cols = [str(c) for c in df.columns[1:]]
-    if not year_cols:
-        raise ValueError("利润表 CSV 未识别到年份列。")
-    df = df.rename(columns={first_col: "科目"})
-    df["科目"] = df["科目"].apply(normalize_item_name)
-    df = df[df["科目"] != ""].copy()
-    df = to_numeric_frame(df, year_cols)
-    return df, "科目", year_cols
+    return load_statement_csv(input_path, item_col_name="科目", error_label="利润表")
 
 
 def preprocess_pl(df: pd.DataFrame, item_col: str, year_cols: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -179,162 +159,7 @@ def preprocess_pl(df: pd.DataFrame, item_col: str, year_cols: List[str]) -> Tupl
 
 
 def build_mapping_rules() -> List[Dict]:
-    return [
-        {
-            "standard_item": "Revenue",
-            "statement_section": "Operating",
-            "bucket": "Revenue",
-            "source_items": ["其中：营业收入(元)"],
-            "formula_desc": "营业收入",
-        },
-        {
-            "standard_item": "COGS",
-            "statement_section": "Operating",
-            "bucket": "Cost",
-            "source_items": ["其中：营业成本(元)"],
-            "formula_desc": "营业成本",
-        },
-        {
-            "standard_item": "Taxes & Surcharges",
-            "statement_section": "Operating",
-            "bucket": "Cost",
-            "source_items": ["营业税金及附加(元)"],
-            "formula_desc": "营业税金及附加",
-        },
-        {
-            "standard_item": "Selling Expense",
-            "statement_section": "Operating",
-            "bucket": "Opex",
-            "source_items": ["销售费用(元)"],
-            "formula_desc": "销售费用",
-        },
-        {
-            "standard_item": "Admin Expense",
-            "statement_section": "Operating",
-            "bucket": "Opex",
-            "source_items": ["管理费用(元)"],
-            "formula_desc": "管理费用",
-        },
-        {
-            "standard_item": "R&D Expense",
-            "statement_section": "Operating",
-            "bucket": "Opex",
-            "source_items": ["研发费用(元)"],
-            "formula_desc": "研发费用",
-        },
-        {
-            "standard_item": "Financial Expense",
-            "statement_section": "Operating",
-            "bucket": "Opex",
-            "source_items": ["财务费用(元)"],
-            "formula_desc": "财务费用",
-        },
-        {
-            "standard_item": "Asset / Credit Impairment",
-            "statement_section": "Operating",
-            "bucket": "Opex",
-            "source_items": ["资产减值损失(元)", "信用减值损失(元)"],
-            "formula_desc": "资产减值损失 + 信用减值损失",
-        },
-        {
-            "standard_item": "Other Operating Gains",
-            "statement_section": "Operating",
-            "bucket": "Other Income",
-            "source_items": ["加：公允价值变动收益(元)", "投资收益(元)", "资产处置收益(元)", "其他收益(元)"],
-            "formula_desc": "公允价值变动收益 + 投资收益 + 资产处置收益 + 其他收益",
-        },
-        {
-            "standard_item": "Operating Profit",
-            "statement_section": "Operating",
-            "bucket": "Profit",
-            "source_items": ["三、营业利润(元)"],
-            "formula_desc": "营业利润",
-        },
-        {
-            "standard_item": "Non-operating Income",
-            "statement_section": "Below Operating",
-            "bucket": "Non-operating",
-            "source_items": ["加：营业外收入(元)"],
-            "formula_desc": "营业外收入",
-        },
-        {
-            "standard_item": "Non-operating Expense",
-            "statement_section": "Below Operating",
-            "bucket": "Non-operating",
-            "source_items": ["减：营业外支出(元)"],
-            "formula_desc": "营业外支出",
-        },
-        {
-            "standard_item": "Profit Before Tax",
-            "statement_section": "Below Operating",
-            "bucket": "Profit",
-            "source_items": ["四、利润总额(元)"],
-            "formula_desc": "利润总额",
-        },
-        {
-            "standard_item": "Income Tax",
-            "statement_section": "Below Operating",
-            "bucket": "Tax",
-            "source_items": ["减：所得税费用(元)"],
-            "formula_desc": "所得税费用",
-        },
-        {
-            "standard_item": "Net Profit",
-            "statement_section": "Below Operating",
-            "bucket": "Profit",
-            "source_items": ["五、净利润(元)"],
-            "formula_desc": "净利润",
-        },
-        {
-            "standard_item": "Parent Net Profit",
-            "statement_section": "Equity Attribution",
-            "bucket": "Attribution",
-            "source_items": ["归属于母公司所有者的净利润(元)"],
-            "formula_desc": "归母净利润",
-        },
-        {
-            "standard_item": "Minority Interest Profit",
-            "statement_section": "Equity Attribution",
-            "bucket": "Attribution",
-            "source_items": ["少数股东损益(元)"],
-            "formula_desc": "少数股东损益",
-        },
-        {
-            "standard_item": "Adjusted Net Profit",
-            "statement_section": "Equity Attribution",
-            "bucket": "Adjusted",
-            "source_items": ["扣除非经常性损益后的净利润(元)"],
-            "formula_desc": "扣非净利润",
-        },
-        {
-            "standard_item": "Parent OCI",
-            "statement_section": "Comprehensive Income",
-            "bucket": "OCI",
-            "source_items": ["归属母公司所有者的其他综合收益(元)"],
-            "formula_desc": "归母其他综合收益",
-        },
-        {
-            "standard_item": "Parent Comprehensive Income",
-            "statement_section": "Comprehensive Income",
-            "bucket": "Comprehensive",
-            "source_items": ["归属于母公司股东的综合收益总额(元)"],
-            "formula_desc": "归母综合收益",
-        },
-        {
-            "standard_item": "Basic EPS",
-            "statement_section": "Per Share",
-            "bucket": "Per Share",
-            "source_items": ["（一）基本每股收益(元)"],
-            "formula_desc": "基本每股收益",
-        },
-        {
-            "standard_item": "Diluted EPS",
-            "statement_section": "Per Share",
-            "bucket": "Per Share",
-            "source_items": ["（二）稀释每股收益(元)"],
-            "formula_desc": "稀释每股收益",
-        },
-    ]
+    return load_mapping_rules("income_statement")
 
 
 def build_mapping_detail(df: pd.DataFrame, item_col: str, rules: List[Dict]) -> pd.DataFrame:
@@ -374,27 +199,11 @@ def build_standardized_pl(df: pd.DataFrame, item_col: str, year_cols: List[str],
 
 
 def build_standardized_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
-    wide = standardized_df.pivot_table(
-        index=["Section", "Bucket", "Standard Item"],
-        columns="Year",
-        values="Value",
-        aggfunc="sum",
-    ).reset_index()
-    wide.columns.name = None
-    return wide
+    return _build_wide(standardized_df, index_cols=["Section", "Bucket", "Standard Item"])
 
 
 def build_standardized_item_wide(standardized_df: pd.DataFrame) -> pd.DataFrame:
-    item_order = standardized_df["Standard Item"].drop_duplicates()
-    wide = standardized_df.pivot_table(
-        index="Standard Item",
-        columns="Year",
-        values="Value",
-        aggfunc="sum",
-        sort=False,
-    ).reindex(item_order).reset_index()
-    wide.columns.name = None
-    return wide
+    return _build_item_wide(standardized_df, item_col="Standard Item")
 
 
 def build_analysis_bridge(df: pd.DataFrame, item_col: str, year_cols: List[str], rules: List[Dict]) -> pd.DataFrame:
@@ -527,84 +336,41 @@ def export_excel_package(
     valuation_df: pd.DataFrame,
 ) -> None:
     standardized_wide = build_standardized_wide(standardized_df)
-    try:
-        writer = pd.ExcelWriter(output_path, engine="xlsxwriter")
-        use_xlsxwriter = True
-    except Exception:
-        writer = pd.ExcelWriter(output_path, engine="openpyxl")
-        use_xlsxwriter = False
-
-    with writer:
-        readme_df = pd.DataFrame(
-            {
-                "Sheet": ["Preprocess_PL", "Preprocess_Check", "Standardized_Long", "Standardized_Wide", "Valuation_Input", "Mapping_Detail", "Analysis_Bridge"],
-                "Description": [
-                    "原始利润表清洗后的结果",
-                    "利润表关键勾稽校验",
-                    "标准化利润表长表",
-                    "标准化利润表宽表",
-                    "可直接用于估值建模的利润指标",
-                    "原始科目与标准科目的映射关系",
-                    "估值分析 bridge",
-                ],
-            }
-        )
-        readme_df.to_excel(writer, sheet_name="README", index=False)
-        preprocess_df.to_excel(writer, sheet_name="Preprocess_PL", index=False)
-        pre_check_df.to_excel(writer, sheet_name="Preprocess_Check", index=False)
-        standardized_df.to_excel(writer, sheet_name="Standardized_Long", index=False)
-        standardized_wide.to_excel(writer, sheet_name="Standardized_Wide", index=False)
-        valuation_df.to_excel(writer, sheet_name="Valuation_Input", index=False)
-        mapping_detail_df.to_excel(writer, sheet_name="Mapping_Detail", index=False)
-        bridge_df.to_excel(writer, sheet_name="Analysis_Bridge", index=False)
-
-        if use_xlsxwriter:
-            workbook = writer.book
-            header_fmt = workbook.add_format({"bold": True, "bg_color": "#DCE6F1", "border": 1, "align": "center"})
-            num_fmt = workbook.add_format({"num_format": "#,##0.00"})
-            ratio_fmt = workbook.add_format({"num_format": "0.00%"})
-            widths = {
-                "README": [22, 48],
-                "Preprocess_PL": [32] + [14] * (preprocess_df.shape[1] - 1),
-                "Preprocess_Check": [10, 18, 18, 18, 18, 12],
-                "Standardized_Long": [10, 20, 28, 18, 16],
-                "Standardized_Wide": [18, 18, 28] + [14] * (standardized_wide.shape[1] - 3),
-                "Valuation_Input": [12, 22, 28] + [14] * (valuation_df.shape[1] - 3),
-                "Mapping_Detail": [32, 28, 18, 18, 12],
-                "Analysis_Bridge": [18, 18, 28, 42, 36] + [14] * max(1, bridge_df.shape[1] - 5),
-            }
-            for sheet_name, col_widths in widths.items():
-                ws = writer.sheets[sheet_name]
-                ws.freeze_panes(1, 1)
-                for idx, width in enumerate(col_widths):
-                    ws.set_column(idx, idx, width)
-                df_map = {
-                    "README": readme_df,
-                    "Preprocess_PL": preprocess_df,
-                    "Preprocess_Check": pre_check_df,
-                    "Standardized_Long": standardized_df,
-                    "Standardized_Wide": standardized_wide,
-                    "Valuation_Input": valuation_df,
-                    "Mapping_Detail": mapping_detail_df,
-                    "Analysis_Bridge": bridge_df,
-                }
-                cur_df = df_map[sheet_name]
-                for col_num, value in enumerate(cur_df.columns):
-                    ws.write(0, col_num, value, header_fmt)
-                if sheet_name == "Valuation_Input":
-                    for row_idx in range(1, valuation_df.shape[0] + 1):
-                        section = valuation_df.iloc[row_idx - 1]["Section"]
-                        for col_idx in range(3, valuation_df.shape[1]):
-                            val = valuation_df.iloc[row_idx - 1, col_idx]
-                            fmt = ratio_fmt if section == "Ratio" else num_fmt
-                            ws.write_number(row_idx, col_idx, float(val), fmt)
-
-
-def _apply_bilingual_fonts_to_file(path: str) -> None:
-    """重新打开 xlsx 文件，应用双语字体（Calibri / 黑体）后保存。"""
-    wb = load_workbook(path)
-    apply_bilingual_fonts(wb)
-    wb.save(path)
+    readme_rows = [
+        ("Preprocess_PL", "原始利润表清洗后的结果"),
+        ("Preprocess_Check", "利润表关键勾稽校验"),
+        ("Standardized_Long", "标准化利润表长表"),
+        ("Standardized_Wide", "标准化利润表宽表"),
+        ("Valuation_Input", "可直接用于估值建模的利润指标"),
+        ("Mapping_Detail", "原始科目与标准科目的映射关系"),
+        ("Analysis_Bridge", "估值分析 bridge"),
+    ]
+    sheets = {
+        "Preprocess_PL": preprocess_df,
+        "Preprocess_Check": pre_check_df,
+        "Standardized_Long": standardized_df,
+        "Standardized_Wide": standardized_wide,
+        "Valuation_Input": valuation_df,
+        "Mapping_Detail": mapping_detail_df,
+        "Analysis_Bridge": bridge_df,
+    }
+    col_widths = {
+        "README": [22, 48],
+        "Preprocess_PL": [32] + [14] * (preprocess_df.shape[1] - 1),
+        "Preprocess_Check": [10, 18, 18, 18, 18, 12],
+        "Standardized_Long": [10, 20, 28, 18, 16],
+        "Standardized_Wide": [18, 18, 28] + [14] * (standardized_wide.shape[1] - 3),
+        "Valuation_Input": [12, 22, 28] + [14] * (valuation_df.shape[1] - 3),
+        "Mapping_Detail": [32, 28, 18, 18, 12],
+        "Analysis_Bridge": [18, 18, 28, 42, 36] + [14] * max(1, bridge_df.shape[1] - 5),
+    }
+    export_statement_excel(
+        output_path=output_path,
+        readme_rows=readme_rows,
+        sheets=sheets,
+        col_widths=col_widths,
+        valuation_sheet_name="Valuation_Input",
+    )
 
 
 def save_outputs(
@@ -634,7 +400,7 @@ def save_outputs(
         bridge_df=bridge_df,
         valuation_df=valuation_df,
     )
-    _apply_bilingual_fonts_to_file(pl_excel_path)
+    apply_bilingual_fonts_to_file(pl_excel_path)
     with open(os.path.join(output_dir, "PL重构说明.md"), "w", encoding="utf-8") as f:
         f.write(md_text)
 
@@ -649,7 +415,7 @@ def main(input_csv: str = str(CSV_DIR / "pl.csv"), output_dir: str = OUTPUT_DIR)
     valuation_df = build_valuation_input_sheet(standardized_df)
     md_text = generate_markdown_doc(pre_check_df, rules)
     save_outputs(output_dir, preprocess_df, pre_check_df, standardized_df, mapping_detail_df, bridge_df, valuation_df, md_text)
-    print(f"利润表重构完成，输出目录：{output_dir}")
+    logger.info("利润表重构完成，输出目录：%s", output_dir)
 
 
 if __name__ == "__main__":

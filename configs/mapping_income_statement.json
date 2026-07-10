@@ -1,0 +1,156 @@
+[
+  {
+    "standard_item": "Revenue",
+    "statement_section": "Operating",
+    "bucket": "Revenue",
+    "source_items": ["其中：营业收入(元)"],
+    "formula_desc": "营业收入"
+  },
+  {
+    "standard_item": "COGS",
+    "statement_section": "Operating",
+    "bucket": "Cost",
+    "source_items": ["其中：营业成本(元)"],
+    "formula_desc": "营业成本"
+  },
+  {
+    "standard_item": "Taxes & Surcharges",
+    "statement_section": "Operating",
+    "bucket": "Cost",
+    "source_items": ["营业税金及附加(元)"],
+    "formula_desc": "营业税金及附加"
+  },
+  {
+    "standard_item": "Selling Expense",
+    "statement_section": "Operating",
+    "bucket": "Opex",
+    "source_items": ["销售费用(元)"],
+    "formula_desc": "销售费用"
+  },
+  {
+    "standard_item": "Admin Expense",
+    "statement_section": "Operating",
+    "bucket": "Opex",
+    "source_items": ["管理费用(元)"],
+    "formula_desc": "管理费用"
+  },
+  {
+    "standard_item": "R&D Expense",
+    "statement_section": "Operating",
+    "bucket": "Opex",
+    "source_items": ["研发费用(元)"],
+    "formula_desc": "研发费用"
+  },
+  {
+    "standard_item": "Financial Expense",
+    "statement_section": "Operating",
+    "bucket": "Opex",
+    "source_items": ["财务费用(元)"],
+    "formula_desc": "财务费用"
+  },
+  {
+    "standard_item": "Asset / Credit Impairment",
+    "statement_section": "Operating",
+    "bucket": "Opex",
+    "source_items": ["资产减值损失(元)", "信用减值损失(元)"],
+    "formula_desc": "资产减值损失 + 信用减值损失"
+  },
+  {
+    "standard_item": "Other Operating Gains",
+    "statement_section": "Operating",
+    "bucket": "Other Income",
+    "source_items": ["加：公允价值变动收益(元)", "投资收益(元)", "资产处置收益(元)", "其他收益(元)"],
+    "formula_desc": "公允价值变动收益 + 投资收益 + 资产处置收益 + 其他收益"
+  },
+  {
+    "standard_item": "Operating Profit",
+    "statement_section": "Operating",
+    "bucket": "Profit",
+    "source_items": ["三、营业利润(元)"],
+    "formula_desc": "营业利润"
+  },
+  {
+    "standard_item": "Non-operating Income",
+    "statement_section": "Below Operating",
+    "bucket": "Non-operating",
+    "source_items": ["加：营业外收入(元)"],
+    "formula_desc": "营业外收入"
+  },
+  {
+    "standard_item": "Non-operating Expense",
+    "statement_section": "Below Operating",
+    "bucket": "Non-operating",
+    "source_items": ["减：营业外支出(元)"],
+    "formula_desc": "营业外支出"
+  },
+  {
+    "standard_item": "Profit Before Tax",
+    "statement_section": "Below Operating",
+    "bucket": "Profit",
+    "source_items": ["四、利润总额(元)"],
+    "formula_desc": "利润总额"
+  },
+  {
+    "standard_item": "Income Tax",
+    "statement_section": "Below Operating",
+    "bucket": "Tax",
+    "source_items": ["减：所得税费用(元)"],
+    "formula_desc": "所得税费用"
+  },
+  {
+    "standard_item": "Net Profit",
+    "statement_section": "Below Operating",
+    "bucket": "Profit",
+    "source_items": ["五、净利润(元)"],
+    "formula_desc": "净利润"
+  },
+  {
+    "standard_item": "Parent Net Profit",
+    "statement_section": "Equity Attribution",
+    "bucket": "Attribution",
+    "source_items": ["归属于母公司所有者的净利润(元)"],
+    "formula_desc": "归母净利润"
+  },
+  {
+    "standard_item": "Minority Interest Profit",
+    "statement_section": "Equity Attribution",
+    "bucket": "Attribution",
+    "source_items": ["少数股东损益(元)"],
+    "formula_desc": "少数股东损益"
+  },
+  {
+    "standard_item": "Adjusted Net Profit",
+    "statement_section": "Equity Attribution",
+    "bucket": "Adjusted",
+    "source_items": ["扣除非经常性损益后的净利润(元)"],
+    "formula_desc": "扣非净利润"
+  },
+  {
+    "standard_item": "Parent OCI",
+    "statement_section": "Comprehensive Income",
+    "bucket": "OCI",
+    "source_items": ["归属母公司所有者的其他综合收益(元)"],
+    "formula_desc": "归母其他综合收益"
+  },
+  {
+    "standard_item": "Parent Comprehensive Income",
+    "statement_section": "Comprehensive Income",
+    "bucket": "Comprehensive",
+    "source_items": ["归属于母公司股东的综合收益总额(元)"],
+    "formula_desc": "归母综合收益"
+  },
+  {
+    "standard_item": "Basic EPS",
+    "statement_section": "Per Share",
+    "bucket": "Per Share",
+    "source_items": ["（一）基本每股收益(元)"],
+    "formula_desc": "基本每股收益"
+  },
+  {
+    "standard_item": "Diluted EPS",
+    "statement_section": "Per Share",
+    "bucket": "Per Share",
+    "source_items": ["（二）稀释每股收益(元)"],
+    "formula_desc": "稀释每股收益"
+  }
+]
